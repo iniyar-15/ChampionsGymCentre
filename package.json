@@ -1,0 +1,19 @@
+{
+  "name": "champions-gym-centre",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
+    "dev:client": "cd client && npm run dev",
+    "dev:server": "cd server && npm run dev",
+    "build": "cd client && npm run build && cd ../server && npm run build",
+    "install:all": "npm install && cd client && npm install && cd ../server && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.106.2",
+    "xlsx": "^0.18.5"
+  }
+}
