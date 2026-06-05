@@ -95,7 +95,8 @@ app.get('/api/student/attendance', async (req, res) => {
 // ─── Fee collection: create ───────────────────────────────────────────────────
 app.post('/api/fee', async (req, res) => {
   const { month, student_id, fee_structure_id, amount, paid_amount,
-          paid_date, payment_mode, reference_id, notes, created_by } = req.body
+          paid_date, payment_mode, reference_id, notes, created_by,
+          cash_received_by } = req.body
   if (!student_id || !amount) return res.status(400).json({ error: 'student_id and amount required' })
 
   const { data, error } = await supabaseAdmin
@@ -104,13 +105,15 @@ app.post('/api/fee', async (req, res) => {
               amount, paid_amount: paid_amount || 0,
               paid_date: paid_date || null, payment_mode: payment_mode || null,
               reference_id: reference_id || null, notes: notes || null,
-              created_by: created_by || null })
+              created_by: created_by || null,
+              cash_received_by: cash_received_by || null })
     .select('id')
     .single()
 
   if (error) return res.status(400).json({ error: error.message })
 
-  if ((paid_amount || 0) > 0) {
+  // No receipt for cash payments
+  if ((paid_amount || 0) > 0 && payment_mode !== 'cash') {
     const { generateAndEmailFeeReceipt } = await import('./services/receipt.js')
     generateAndEmailFeeReceipt(data.id).catch(e => console.error('[RECEIPT]', e.message))
   }
@@ -121,7 +124,8 @@ app.post('/api/fee', async (req, res) => {
 // ─── Fee collection: update ───────────────────────────────────────────────────
 app.put('/api/fee/:id', async (req, res) => {
   const { month, student_id, fee_structure_id, amount, paid_amount,
-          paid_date, payment_mode, reference_id, notes, created_by } = req.body
+          paid_date, payment_mode, reference_id, notes, created_by,
+          cash_received_by } = req.body
 
   const { error } = await supabaseAdmin
     .from('fee_collections')
@@ -129,17 +133,30 @@ app.put('/api/fee/:id', async (req, res) => {
               amount, paid_amount: paid_amount || 0,
               paid_date: paid_date || null, payment_mode: payment_mode || null,
               reference_id: reference_id || null, notes: notes || null,
-              created_by: created_by || null })
+              created_by: created_by || null,
+              cash_received_by: cash_received_by || null })
     .eq('id', req.params.id)
 
   if (error) return res.status(400).json({ error: error.message })
 
-  if ((paid_amount || 0) > 0) {
+  // No receipt for cash payments
+  if ((paid_amount || 0) > 0 && payment_mode !== 'cash') {
     const { generateAndEmailFeeReceipt } = await import('./services/receipt.js')
     generateAndEmailFeeReceipt(req.params.id).catch(e => console.error('[RECEIPT]', e.message))
   }
 
   return res.json({ id: req.params.id })
+})
+
+// ─── Staff list (for cash received-by selector) ──────────────────────────────
+app.get('/api/staff', async (_req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('users')
+    .select('id, user_name, role')
+    .in('role', ['admin', 'coach', 'manager'])
+    .order('user_name')
+  if (error) return res.status(400).json({ error: error.message })
+  return res.json(data || [])
 })
 
 // ─── Fee collections: list for student (bypasses RLS) ────────────────────────
@@ -151,6 +168,72 @@ app.get('/api/fee/student/:studentId', async (req, res) => {
     .order('month', { ascending: false })
   if (error) return res.status(400).json({ error: error.message })
   return res.json(data || [])
+})
+
+// ─── Razorpay: create order ───────────────────────────────────────────────────
+app.post('/api/fee/create-order', async (req, res) => {
+  const { amount, studentId, month, feeStructureId } = req.body
+  if (!amount || !studentId || !month) return res.status(400).json({ error: 'amount, studentId, month required' })
+
+  const keyId = process.env.RAZORPAY_KEY_ID
+  const keySecret = process.env.RAZORPAY_KEY_SECRET
+  if (!keyId || keyId.startsWith('rzp_test_your')) {
+    return res.status(503).json({ error: 'Payment gateway not configured yet' })
+  }
+
+  try {
+    const Razorpay = (await import('razorpay')).default
+    const rzp = new Razorpay({ key_id: keyId, key_secret: keySecret! })
+    const order = await rzp.orders.create({
+      amount: Math.round(amount * 100), // paise
+      currency: 'INR',
+      receipt: `fee_${studentId.slice(0, 8)}_${month.replace('-', '')}`,
+      notes: { studentId, month, feeStructureId: feeStructureId || '' },
+    })
+    return res.json({ orderId: order.id, amount: order.amount, currency: order.currency })
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message })
+  }
+})
+
+// ─── Razorpay: verify payment + record ────────────────────────────────────────
+app.post('/api/fee/verify-payment', async (req, res) => {
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature,
+          studentId, month, feeStructureId, amount } = req.body
+
+  // Verify signature
+  const { createHmac } = await import('crypto')
+  const hmac = createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
+  hmac.update(`${razorpay_order_id}|${razorpay_payment_id}`)
+  const expected = hmac.digest('hex')
+
+  if (expected !== razorpay_signature) {
+    return res.status(400).json({ error: 'Payment verification failed — invalid signature' })
+  }
+
+  // Record payment
+  const { data, error } = await supabaseAdmin
+    .from('fee_collections')
+    .insert({
+      month: `${month}-01`,
+      student_id: studentId,
+      fee_structure_id: feeStructureId || null,
+      amount: amount / 100, // convert paise back to rupees
+      paid_amount: amount / 100,
+      paid_date: new Date().toISOString().split('T')[0],
+      payment_mode: 'online',
+      reference_id: razorpay_payment_id,
+    })
+    .select('id')
+    .single()
+
+  if (error) return res.status(400).json({ error: error.message })
+
+  // Email receipt
+  const { generateAndEmailFeeReceipt } = await import('./services/receipt.js')
+  generateAndEmailFeeReceipt(data.id).catch(e => console.error('[RECEIPT]', e.message))
+
+  return res.json({ success: true, id: data.id })
 })
 
 // ─── Fee receipt: generate + email + store ────────────────────────────────────

@@ -115,6 +115,7 @@ export interface Database {
           reference_id: string | null
           notes: string | null
           receipt_url: string | null
+          cash_received_by: string | null
           created_by: string | null
           created_at: string
           updated_at: string
@@ -148,6 +149,10 @@ export interface Database {
           level_id: string | null
           entry_fee: number | null
           is_finalized: boolean
+          start_date: string | null
+          end_date: string | null
+          start_time: string | null
+          end_time: string | null
         }
         Insert: Omit<Database['public']['Tables']['competition_age_groups']['Row'], 'id'>
         Update: Partial<Database['public']['Tables']['competition_age_groups']['Insert']>
@@ -157,8 +162,11 @@ export interface Database {
           id: string
           age_group_id: string
           student_id: string
-          status: 'shortlisted' | 'finalized' | 'removed'
+          status: 'shortlisted' | 'finalized' | 'removed' | 'confirmed'
           notified_at: string | null
+          entry_fee_paid: boolean
+          entry_fee_payment_mode: string | null
+          confirmed_at: string | null
           created_at: string
           updated_at: string
         }

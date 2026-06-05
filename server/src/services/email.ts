@@ -56,6 +56,40 @@ export async function sendCompetitionShortlistEmail(params: {
   })
 }
 
+export async function sendFeeReminderEmail(params: {
+  to: string
+  studentName: string
+  month: string
+  amountDue: number
+  reminderDay: number
+}) {
+  const transport = createTransport()
+  const { to, studentName, month, amountDue, reminderDay } = params
+  const urgency = reminderDay >= 10 ? 'urgent' : 'friendly'
+
+  await transport.sendMail({
+    from: process.env.SMTP_USER,
+    to,
+    subject: `${urgency === 'urgent' ? '⚠️ Action Required' : '📢 Reminder'} — Fee Due for ${month} | Champions Gymnastics Centre`,
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px">
+        <h2 style="color:#1d4ed8">Champions Gymnastics Centre (CGC)</h2>
+        <p>Dear <strong>${studentName}</strong>,</p>
+        ${urgency === 'urgent'
+          ? `<p>This is a gentle reminder that your gymnastics training fee for <strong>${month}</strong> is still outstanding.</p>`
+          : `<p>Your gymnastics training fee for <strong>${month}</strong> is due.</p>`
+        }
+        <table style="width:100%;border-collapse:collapse;margin:16px 0">
+          <tr><td style="padding:8px;background:#f1f5f9;font-weight:bold">Month</td><td style="padding:8px">${month}</td></tr>
+          <tr><td style="padding:8px;background:#fef3c7;font-weight:bold;color:#92400e">Amount Due</td><td style="padding:8px;font-weight:bold;color:#92400e">₹${amountDue.toFixed(2)}</td></tr>
+        </table>
+        <p>Please log in to the <a href="${process.env.CLIENT_URL || 'http://localhost:5173'}">CGC Portal</a> to make your payment.</p>
+        <p style="color:#64748b;font-size:12px">Champions Gymnastics Centre (CGC), ECR, Chennai</p>
+      </div>
+    `,
+  })
+}
+
 export async function sendReportEmail() {
   const transport = createTransport()
   const managerEmail = process.env.MANAGER_EMAIL

@@ -48,6 +48,7 @@ router.get('/competitions', async (_req, res) => {
       *,
       competition_age_groups(
         id, name, min_age, max_age, level_id, entry_fee, is_finalized,
+        start_date, end_date, start_time, end_time,
         levels(name),
         competition_age_group_apparatus(id, apparatus_id, apparatus(name)),
         competition_shortlist(id, student_id, status, students(name))
@@ -61,7 +62,8 @@ router.get('/competitions', async (_req, res) => {
 // ─── Create age group ─────────────────────────────────────────────────────────
 router.post('/competitions/:compId/age-groups', async (req, res) => {
   const { compId } = req.params
-  const { name, min_age, max_age, level_id, entry_fee, apparatus_ids } = req.body
+  const { name, min_age, max_age, level_id, entry_fee, apparatus_ids,
+          start_date, end_date, start_time, end_time } = req.body
 
   if (!name?.trim()) return res.status(400).json({ error: 'Age group name is required' })
 
@@ -74,6 +76,10 @@ router.post('/competitions/:compId/age-groups', async (req, res) => {
       max_age: max_age ?? null,
       level_id: level_id || null,
       entry_fee: entry_fee ?? null,
+      start_date: start_date || null,
+      end_date: end_date || null,
+      start_time: start_time || null,
+      end_time: end_time || null,
     })
     .select()
     .single()
@@ -249,6 +255,25 @@ router.post('/competitions/age-groups/:agId/shortlist', async (req, res) => {
   return res.json({ success: true, notified: newlyShortlisted.length })
 })
 
+// ─── Student: confirm competition participation ───────────────────────────────
+router.post('/student/competitions/:shortlistId/confirm', async (req, res) => {
+  const { shortlistId } = req.params
+  const { entry_fee_paid, entry_fee_payment_mode } = req.body
+
+  const { error } = await supabaseAdmin
+    .from('competition_shortlist')
+    .update({
+      status: 'confirmed',
+      entry_fee_paid: entry_fee_paid ?? false,
+      entry_fee_payment_mode: entry_fee_payment_mode || null,
+      confirmed_at: new Date().toISOString(),
+    })
+    .eq('id', shortlistId)
+
+  if (error) return res.status(400).json({ error: error.message })
+  return res.json({ success: true })
+})
+
 // ─── Student: shortlisted + finalized competitions ────────────────────────────
 router.get('/student/competitions', async (req, res) => {
   const { studentId } = req.query as Record<string, string>
@@ -264,7 +289,7 @@ router.get('/student/competitions', async (req, res) => {
       )
     `)
     .eq('student_id', studentId)
-    .in('status', ['shortlisted', 'finalized'])
+    .in('status', ['shortlisted', 'finalized', 'confirmed'])
     .order('created_at', { ascending: false })
 
   if (error) return res.status(400).json({ error: error.message })
@@ -276,12 +301,12 @@ router.get('/student/announcements', async (req, res) => {
   const { studentId } = req.query as Record<string, string>
   if (!studentId) return res.status(400).json({ error: 'studentId required' })
 
-  // Find competitions where this student is shortlisted or finalized
+  // Find competitions where this student is shortlisted, finalized or confirmed
   const { data: shortlistEntries } = await supabaseAdmin
     .from('competition_shortlist')
     .select('competition_age_groups(competition_id)')
     .eq('student_id', studentId)
-    .in('status', ['shortlisted', 'finalized'])
+    .in('status', ['shortlisted', 'finalized', 'confirmed'])
 
   const competitionIds: string[] = (shortlistEntries || [])
     .map((e: any) => e.competition_age_groups?.competition_id)

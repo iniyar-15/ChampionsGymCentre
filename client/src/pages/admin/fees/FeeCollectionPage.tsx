@@ -20,10 +20,13 @@ type FeeCollectionFull = FeeCollectionRow & {
   fee_structures: { name: string; amount: number } | null
 }
 
+type StaffMember = { id: string; user_name: string; role: string }
+
 const emptyForm = {
   month: format(startOfMonth(new Date()), 'yyyy-MM'),
   student_id: '', fee_structure_id: '', amount: '',
   paid_amount: '0', paid_date: '', payment_mode: '', reference_id: '', notes: '',
+  cash_received_by: '',
 }
 
 export default function FeeCollectionPage() {
@@ -62,6 +65,14 @@ export default function FeeCollectionPage() {
     },
   })
 
+  const { data: staffList = [] } = useQuery<StaffMember[]>({
+    queryKey: ['staff-list'],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/api/staff`)
+      return res.json()
+    },
+  })
+
   function onStudentChange(studentId: string) {
     const student = students.find(s => s.id === studentId)
     setForm(f => ({
@@ -77,6 +88,8 @@ export default function FeeCollectionPage() {
       setFormError('')
       if (!form.student_id) throw new Error('Student is required')
       if (!form.amount) throw new Error('Fee amount is required')
+      if (form.payment_mode === 'cash' && parseFloat(form.paid_amount) > 0 && !form.cash_received_by)
+        throw new Error('Please select who received the cash payment')
 
       const payload = {
         month: `${form.month}-01`,
@@ -89,6 +102,7 @@ export default function FeeCollectionPage() {
         reference_id: form.reference_id || null,
         notes: form.notes || null,
         created_by: appUser?.type === 'staff' ? appUser.id : null,
+        cash_received_by: form.payment_mode === 'cash' ? form.cash_received_by || null : null,
       }
 
       const url = editing ? `${API_URL}/api/fee/${editing.id}` : `${API_URL}/api/fee`
@@ -138,6 +152,7 @@ export default function FeeCollectionPage() {
       payment_mode: fc.payment_mode || '',
       reference_id: fc.reference_id || '',
       notes: fc.notes || '',
+      cash_received_by: (fc as any).cash_received_by || '',
     })
     setFormError('')
     setModalOpen(true)
@@ -296,9 +311,24 @@ export default function FeeCollectionPage() {
             </FormField>
           </div>
 
-          <FormField label="Reference / Transaction ID">
-            <Input value={form.reference_id} onChange={e => setForm(f => ({ ...f, reference_id: e.target.value }))} placeholder="UPI ref, cheque no…" />
-          </FormField>
+          {form.payment_mode === 'cash' && parseFloat(form.paid_amount) > 0 && (
+            <FormField label="Cash Received By" required hint="Select who received the cash">
+              <Select value={form.cash_received_by} onChange={e => setForm(f => ({ ...f, cash_received_by: e.target.value }))}>
+                <option value="">— Select Staff —</option>
+                {staffList.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.user_name} ({s.role})
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+          )}
+
+          {form.payment_mode !== 'cash' && (
+            <FormField label="Reference / Transaction ID">
+              <Input value={form.reference_id} onChange={e => setForm(f => ({ ...f, reference_id: e.target.value }))} placeholder="UPI ref, cheque no…" />
+            </FormField>
+          )}
 
           <FormField label="Notes">
             <Textarea rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />

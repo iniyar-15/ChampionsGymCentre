@@ -1,64 +1,21 @@
 import cron from 'node-cron'
 import { supabaseAdmin } from './index.js'
-import { format, startOfMonth, subMonths } from 'date-fns'
-import { sendReportEmail } from './services/email.js'
+import { format, startOfMonth, getDaysInMonth } from 'date-fns'
+import { sendReportEmail, sendFeeReminderEmail } from './services/email.js'
 
 export function setupScheduledJobs() {
-  // ─── Class reminder — 9 AM daily ─────────────────────────────────────────
-  cron.schedule('0 9 * * *', async () => {
-    const dayMap: Record<number, string> = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' }
-    const todayDay = dayMap[new Date().getDay()]
 
-    const { data: batches } = await supabaseAdmin
-      .from('batches')
-      .select('id, name, days')
-
-    const todayBatches = (batches || []).filter(b => b.days?.includes(todayDay))
-    if (!todayBatches.length) return
-
-    const batchIds = todayBatches.map(b => b.id)
-    const { data: enrollments } = await supabaseAdmin
-      .from('student_batches')
-      .select('student_id, students(name, contact_phone)')
-      .in('batch_id', batchIds)
-
-    const phones = new Set<string>()
-    enrollments?.forEach((e: any) => {
-      if (e.students?.contact_phone) phones.add(e.students.contact_phone)
-    })
-
-    // SMS sending would go here — for now just log
-    console.log(`[REMINDER] Class reminder: ${phones.size} students, batches: ${todayBatches.map(b => b.name).join(', ')}`)
+  // ─── 1st of month: auto-create fee bills for all active students ─────────────
+  cron.schedule('1 0 1 * *', async () => {
+    await autoCreateMonthlyBills()
   })
 
-  // ─── Fee reminder — 8th of every month ────────────────────────────────────
-  cron.schedule('0 9 8 * *', async () => {
-    await sendFeeReminders()
-  })
+  // ─── Fee reminders: 3rd, 7th, 10th at 9 AM ───────────────────────────────────
+  cron.schedule('0 9 3 * *', async () => { await sendFeeReminders(3) })
+  cron.schedule('0 9 7 * *', async () => { await sendFeeReminders(7) })
+  cron.schedule('0 9 10 * *', async () => { await sendFeeReminders(10) })
 
-  // ─── Fee reminder follow-up — every 2 days after 10th ──────────────────────
-  cron.schedule('0 9 */2 * *', async () => {
-    const day = new Date().getDate()
-    if (day > 10) {
-      await sendFeeReminders()
-    }
-  })
-
-  // ─── Competition notice — weekly on Monday ────────────────────────────────
-  cron.schedule('0 10 * * 1', async () => {
-    const today = format(new Date(), 'yyyy-MM-dd')
-    const { data: competitions } = await supabaseAdmin
-      .from('competitions')
-      .select('id, name, start_date, location')
-      .gte('start_date', today)
-      .order('start_date')
-      .limit(3)
-
-    if (!competitions?.length) return
-    console.log(`[COMPETITION] ${competitions.length} upcoming competitions to notify about`)
-  })
-
-  // ─── Monthly reports — 1st of each month at 6 AM ─────────────────────────
+  // ─── Monthly reports — 1st of each month at 6 AM ─────────────────────────────
   cron.schedule('0 6 1 * *', async () => {
     try {
       await sendReportEmail()
@@ -69,23 +26,116 @@ export function setupScheduledJobs() {
   })
 }
 
-async function sendFeeReminders() {
+// ─── Auto-create monthly bills ────────────────────────────────────────────────
+async function autoCreateMonthlyBills() {
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd')
+  console.log(`[BILLING] Auto-creating bills for ${monthStart}`)
 
-  const { data: allStudents } = await supabaseAdmin
+  const { data: students } = await supabaseAdmin
     .from('students')
-    .select('id, name, contact_phone, fee_structure_id')
+    .select('id, name, created_at, fee_structure_id, fee_structures(amount)')
     .eq('is_active', true)
+    .not('fee_structure_id', 'is', null)
 
-  const { data: paidFees } = await supabaseAdmin
+  if (!students?.length) return
+
+  // Fetch existing bills for this month to avoid duplicates
+  const { data: existing } = await supabaseAdmin
     .from('fee_collections')
-    .select('student_id, paid_amount, amount')
+    .select('student_id')
     .eq('month', monthStart)
 
-  const paidSet = new Set(
-    (paidFees || []).filter(f => (f.paid_amount || 0) >= f.amount).map(f => f.student_id)
+  const alreadyBilled = new Set((existing || []).map((r: any) => r.student_id))
+
+  const now = new Date()
+  const daysInMonth = getDaysInMonth(now)
+
+  const rows: any[] = []
+  for (const s of students) {
+    if (alreadyBilled.has(s.id)) continue
+
+    const fullAmount: number = (s as any).fee_structures?.amount || 0
+    if (!fullAmount) continue
+
+    // Prorate if student joined during the current month
+    const joinedAt = new Date(s.created_at)
+    let amount = fullAmount
+    if (
+      joinedAt.getFullYear() === now.getFullYear() &&
+      joinedAt.getMonth() === now.getMonth() &&
+      joinedAt.getDate() > 1
+    ) {
+      const remainingDays = daysInMonth - joinedAt.getDate() + 1
+      amount = Math.round((fullAmount / daysInMonth) * remainingDays)
+    }
+
+    rows.push({
+      month: monthStart,
+      student_id: s.id,
+      fee_structure_id: (s as any).fee_structure_id,
+      amount,
+      paid_amount: 0,
+    })
+  }
+
+  if (rows.length) {
+    const { error } = await supabaseAdmin.from('fee_collections').insert(rows)
+    if (error) console.error('[BILLING] Insert error:', error.message)
+    else console.log(`[BILLING] Created ${rows.length} fee records for ${monthStart}`)
+  }
+}
+
+// ─── Fee reminders via email ──────────────────────────────────────────────────
+async function sendFeeReminders(day: number) {
+  const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd')
+  const monthLabel = format(new Date(), 'MMMM yyyy')
+  console.log(`[FEE REMINDER] Day ${day} — checking unpaid fees for ${monthStart}`)
+
+  // Get all fee records for this month
+  const { data: fees } = await supabaseAdmin
+    .from('fee_collections')
+    .select('student_id, amount, paid_amount')
+    .eq('month', monthStart)
+
+  // Sum paid per student
+  const paidByStudent: Record<string, number> = {}
+  const dueByStudent: Record<string, number> = {}
+  for (const f of fees || []) {
+    paidByStudent[f.student_id] = (paidByStudent[f.student_id] || 0) + (f.paid_amount || 0)
+    dueByStudent[f.student_id] = (dueByStudent[f.student_id] || 0) + f.amount
+  }
+
+  const unpaidIds = Object.keys(dueByStudent).filter(
+    id => paidByStudent[id] < dueByStudent[id]
   )
 
-  const unpaid = (allStudents || []).filter(s => s.fee_structure_id && !paidSet.has(s.id))
-  console.log(`[FEE REMINDER] ${unpaid.length} students have unpaid fees for ${monthStart}`)
+  if (!unpaidIds.length) {
+    console.log('[FEE REMINDER] Everyone has paid — no reminders needed')
+    return
+  }
+
+  const { data: students } = await supabaseAdmin
+    .from('students')
+    .select('id, name, email')
+    .in('id', unpaidIds)
+
+  let sent = 0
+  for (const s of students || []) {
+    if (!s.email) continue
+    const balance = dueByStudent[s.id] - (paidByStudent[s.id] || 0)
+    try {
+      await sendFeeReminderEmail({
+        to: s.email,
+        studentName: s.name,
+        month: monthLabel,
+        amountDue: balance,
+        reminderDay: day,
+      })
+      sent++
+    } catch (err: any) {
+      console.error(`[FEE REMINDER] Failed to email ${s.email}:`, err.message)
+    }
+  }
+
+  console.log(`[FEE REMINDER] Sent ${sent} reminders for day ${day}`)
 }

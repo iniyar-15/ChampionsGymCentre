@@ -1,0 +1,5 @@
+ALTER TABLE competition_age_groups
+  ADD COLUMN IF NOT EXISTS start_date DATE,
+  ADD COLUMN IF NOT EXISTS end_date   DATE,
+  ADD COLUMN IF NOT EXISTS start_time TIME,
+  ADD COLUMN IF NOT EXISTS end_time   TIME;
