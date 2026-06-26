@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { PraxisMark, PraxisWordmark } from '@/components/branding/PraxisLogo'
+import { PraxisMark, CustomerName, PoweredByPraxis } from '@/components/branding/PraxisLogo'
 import { useAuth } from '@/context/AuthContext'
 import { useQuery } from '@tanstack/react-query'
 import { cn, calculateAge } from '@/lib/utils'
@@ -94,9 +94,9 @@ export default function Sidebar() {
       {/* Brand */}
       <div className="px-4 py-5 border-b border-slate-700">
         <div className="flex items-center gap-3">
-          <PraxisMark className="w-9 h-9 rounded-lg flex-shrink-0" />
+          <PraxisMark className="w-10 h-10 rounded-lg flex-shrink-0 bg-white p-0.5" />
           <div className="overflow-hidden">
-            <p className="text-white font-semibold text-lg truncate"><PraxisWordmark /></p>
+            <p className="text-white font-semibold text-sm leading-tight truncate"><CustomerName /></p>
             <p className="text-slate-400 text-xs truncate">Academy Management</p>
           </div>
         </div>
@@ -169,6 +169,12 @@ export default function Sidebar() {
           <LogOut size={18} />
           <span>Sign Out</span>
         </button>
+      </div>
+
+      {/* Attribution */}
+      <div className="px-4 py-2.5 border-t border-slate-800 flex items-center gap-1.5">
+        <PraxisMark className="w-5 h-5 flex-shrink-0 rounded opacity-80 bg-white p-px" />
+        <PoweredByPraxis className="text-slate-500 text-[10px]" />
       </div>
     </aside>
   )

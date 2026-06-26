@@ -121,7 +121,7 @@ export default function ManagerReportsPage() {
   function generatePDF() {
     const doc = new jsPDF()
     doc.setFontSize(16)
-    doc.text('Praxis', 14, 20)
+    doc.text('Champions Gymnastics Center', 14, 20)
     doc.setFontSize(12)
     const labels: Record<ManagerReportType, string> = {
       'new-students': 'New Students Report',

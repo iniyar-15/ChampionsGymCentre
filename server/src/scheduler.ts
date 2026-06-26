@@ -10,10 +10,9 @@ export function setupScheduledJobs() {
     await autoCreateMonthlyBills()
   })
 
-  // ─── Fee reminders: 3rd, 7th, 10th at 9 AM ───────────────────────────────────
-  cron.schedule('0 9 3 * *', async () => { await sendFeeReminders(3) })
-  cron.schedule('0 9 7 * *', async () => { await sendFeeReminders(7) })
-  cron.schedule('0 9 10 * *', async () => { await sendFeeReminders(10) })
+  // ─── Fee reminders: 2nd and 8th at 9 AM ─────────────────────────────────────
+  cron.schedule('0 9 2 * *', async () => { await sendFeeReminders(2) })
+  cron.schedule('0 9 8 * *', async () => { await sendFeeReminders(8) })
 
   // ─── Monthly reports — 1st of each month at 6 AM ─────────────────────────────
   cron.schedule('0 6 1 * *', async () => {

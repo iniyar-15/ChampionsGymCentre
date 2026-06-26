@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Plus, Pencil, Trash2, Mail, Download } from 'lucide-react'
+import { Plus, Pencil, Trash2, CheckCircle, Download } from 'lucide-react'
 import type { FeeCollectionRow, StudentRow, FeeStructureRow } from '@/types/database'
 import PageHeader from '@/components/ui/PageHeader'
 import SearchBar from '@/components/ui/SearchBar'
@@ -118,13 +118,13 @@ export default function FeeCollectionPage() {
     onError: (e: Error) => setFormError(e.message),
   })
 
-  const resendReceiptMutation = useMutation({
+  const approveMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`${API_URL}/api/fee/${id}/send-receipt`, { method: 'POST' })
-      if (!res.ok) throw new Error('Failed to send receipt')
+      if (!res.ok) throw new Error('Failed to approve payment')
     },
-    onSuccess: () => alert('Receipt emailed to student.'),
-    onError: () => alert('Failed to send receipt. Check student email is set.'),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['fee-collections'] }); alert('Payment approved. Receipt generated and emailed to student.') },
+    onError: () => alert('Failed to approve. Check student email is set.'),
   })
 
   async function downloadReceipt(id: string) {
@@ -227,7 +227,27 @@ export default function FeeCollectionPage() {
                 <tr><td colSpan={9} className="text-center py-8 text-gray-400">No records for this month</td></tr>
               ) : filtered.map(fc => {
                 const balance = fc.amount - (fc.paid_amount || 0)
-                const status = balance <= 0 ? 'Paid' : fc.paid_amount ? 'Partial' : 'Pending'
+                const isCash = fc.payment_mode === 'cash'
+                const hasPaid = (fc.paid_amount || 0) > 0
+                const isApproved = !!(fc as any).receipt_url
+                const pendingCashApproval = isCash && hasPaid && !isApproved
+
+                let statusLabel: string
+                let statusClass: string
+                if (pendingCashApproval) {
+                  statusLabel = 'Pending Approval'
+                  statusClass = 'badge-yellow'
+                } else if (balance <= 0) {
+                  statusLabel = 'Paid'
+                  statusClass = 'badge-green'
+                } else if (hasPaid) {
+                  statusLabel = 'Partial'
+                  statusClass = 'badge-yellow'
+                } else {
+                  statusLabel = 'Pending'
+                  statusClass = 'badge-red'
+                }
+
                 return (
                   <tr key={fc.id}>
                     <td>
@@ -241,26 +261,25 @@ export default function FeeCollectionPage() {
                     <td>{fc.payment_mode || '—'}</td>
                     <td className="text-xs">{fc.reference_id || '—'}</td>
                     <td>
-                      <span className={`badge ${status === 'Paid' ? 'badge-green' : status === 'Partial' ? 'badge-yellow' : 'badge-red'}`}>
-                        {status}
-                      </span>
+                      <span className={`badge ${statusClass}`}>{statusLabel}</span>
                     </td>
                     <td>
                       <div className="flex gap-2">
                         <Button size="sm" variant="ghost" onClick={() => openEdit(fc)}><Pencil size={14} /></Button>
-                        {(fc as any).receipt_url && (
+                        {isApproved && (
                           <Button size="sm" variant="ghost" onClick={() => downloadReceipt(fc.id)} title="Download receipt">
                             <Download size={14} />
                           </Button>
                         )}
-                        {(fc.paid_amount || 0) > 0 && (
+                        {pendingCashApproval && (
                           <Button
-                            size="sm" variant="ghost"
-                            onClick={() => resendReceiptMutation.mutate(fc.id)}
-                            loading={resendReceiptMutation.isPending}
-                            title="Email receipt"
+                            size="sm" variant="outline"
+                            onClick={() => approveMutation.mutate(fc.id)}
+                            loading={approveMutation.isPending}
+                            title="Approve cash payment and generate receipt"
+                            className="text-green-700 border-green-300 hover:bg-green-50 text-xs px-2"
                           >
-                            <Mail size={14} />
+                            <CheckCircle size={13} /> Approve
                           </Button>
                         )}
                         <Button size="sm" variant="ghost" onClick={() => setDeleteId(fc.id)} className="text-red-500 hover:text-red-700"><Trash2 size={14} /></Button>

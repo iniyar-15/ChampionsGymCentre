@@ -26,6 +26,7 @@ import CurriculumPage from '@/pages/coach/CurriculumPage'
 import FeedbackPage from '@/pages/coach/FeedbackPage'
 
 // Manager pages
+import ManagerDashboard from '@/pages/manager/ManagerDashboard'
 import ManagerReportsPage from '@/pages/manager/ManagerReportsPage'
 
 // Student pages
@@ -85,7 +86,7 @@ function AppRoutes() {
 
       {/* Manager */}
       <Route path="/manager" element={<ProtectedRoute allowedTypes={['manager']}><AppLayout /></ProtectedRoute>}>
-        <Route index element={<ManagerReportsPage />} />
+        <Route index element={<ManagerDashboard />} />
         <Route path="reports" element={<ManagerReportsPage />} />
       </Route>
 

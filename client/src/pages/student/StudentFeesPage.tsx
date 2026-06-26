@@ -50,7 +50,10 @@ export default function StudentFeesPage() {
     },
   })
 
-  const existingRecord = feeHistory.find((fc: any) => fc.month.startsWith(selectedMonth))
+  const existingRecords = feeHistory.filter((fc: any) => fc.month.startsWith(selectedMonth))
+  const totalPaidForMonth = existingRecords.reduce((s: number, fc: any) => s + (fc.paid_amount || 0), 0)
+  const monthlyAmount = feeStructure?.amount || 0
+  const balanceForMonth = Math.max(0, monthlyAmount - totalPaidForMonth)
 
   const payMutation = useMutation({
     mutationFn: async () => {
@@ -62,45 +65,23 @@ export default function StudentFeesPage() {
         throw new Error('Please select who received the cash payment')
 
       const monthDate = `${selectedMonth}-01`
-      const amount = feeStructure?.amount || 0
-
-      if (existingRecord) {
-        const res = await fetch(`${API_URL}/api/fee/${(existingRecord as any).id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            month: monthDate,
-            student_id: student!.id,
-            fee_structure_id: student!.fee_structure_id || null,
-            amount,
-            paid_amount: parseFloat(payForm.paid_amount),
-            paid_date: payForm.paid_date,
-            payment_mode: payForm.payment_mode,
-            reference_id: payForm.reference_id || null,
-            cash_received_by: payForm.payment_mode === 'cash' ? payForm.cash_received_by || null : null,
-          }),
-        })
-        const json = await res.json()
-        if (!res.ok) throw new Error(json.error || 'Failed to update payment')
-      } else {
-        const res = await fetch(`${API_URL}/api/fee`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            month: monthDate,
-            student_id: student!.id,
-            fee_structure_id: student!.fee_structure_id || null,
-            amount,
-            paid_amount: parseFloat(payForm.paid_amount),
-            paid_date: payForm.paid_date,
-            payment_mode: payForm.payment_mode,
-            reference_id: payForm.reference_id || null,
-            cash_received_by: payForm.payment_mode === 'cash' ? payForm.cash_received_by || null : null,
-          }),
-        })
-        const json = await res.json()
-        if (!res.ok) throw new Error(json.error || 'Failed to record payment')
-      }
+      const res = await fetch(`${API_URL}/api/fee`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          month: monthDate,
+          student_id: student!.id,
+          fee_structure_id: student!.fee_structure_id || null,
+          amount: monthlyAmount,
+          paid_amount: parseFloat(payForm.paid_amount),
+          paid_date: payForm.paid_date,
+          payment_mode: payForm.payment_mode,
+          reference_id: payForm.reference_id || null,
+          cash_received_by: payForm.payment_mode === 'cash' ? payForm.cash_received_by || null : null,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Failed to record payment')
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['student-fees'] }); setPayModal(false) },
     onError: (e: Error) => setFormError(e.message),
@@ -148,7 +129,7 @@ export default function StudentFeesPage() {
       key: keyId,
       amount: order.amount,
       currency: order.currency,
-      name: 'Praxis',
+      name: 'Champions Gymnastics Center',
       description: `Fee for ${format(new Date(selectedMonth + '-01'), 'MMMM yyyy')}`,
       order_id: order.orderId,
       prefill: {
@@ -195,8 +176,9 @@ export default function StudentFeesPage() {
     setPayForm({
       payment_mode: '',
       paid_date: format(new Date(), 'yyyy-MM-dd'),
-      reference_id: (existingRecord as any)?.reference_id || '',
-      paid_amount: feeStructure?.amount?.toString() || '',
+      reference_id: '',
+      paid_amount: (balanceForMonth > 0 ? balanceForMonth : monthlyAmount).toString() || '',
+      cash_received_by: '',
     })
     setFormError('')
     setPayModal(true)
@@ -235,22 +217,16 @@ export default function StudentFeesPage() {
               {monthOptions.map(m => <option key={m} value={m}>{format(new Date(m + '-01'), 'MMMM yyyy')}</option>)}
             </Select>
           </FormField>
-          {existingRecord ? (
-            <div className="flex items-center gap-3">
-              {(existingRecord as any).paid_amount >= (existingRecord as any).amount ? (
-                <span className="badge badge-green text-sm px-3 py-1.5">Paid ✓</span>
-              ) : (
-                <>
-                  <span className="badge badge-yellow text-sm px-3 py-1.5">
-                    Partial — Balance {formatCurrency((existingRecord as any).amount - (existingRecord as any).paid_amount)}
-                  </span>
-                  <Button onClick={openPayModal}>Pay Balance</Button>
-                </>
-              )}
-            </div>
-          ) : (
-            <Button onClick={openPayModal} disabled={!feeStructure}>Pay</Button>
-          )}
+          <div className="flex items-center gap-3">
+            {totalPaidForMonth > 0 && (
+              <span className={`badge ${balanceForMonth <= 0 ? 'badge-green' : 'badge-yellow'} text-sm px-3 py-1.5`}>
+                {balanceForMonth <= 0 ? 'Paid ✓' : `Balance ${formatCurrency(balanceForMonth)}`}
+              </span>
+            )}
+            <Button onClick={openPayModal} disabled={!feeStructure}>
+              {totalPaidForMonth > 0 ? 'Add Payment' : 'Pay'}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -267,8 +243,12 @@ export default function StudentFeesPage() {
             {feeHistory.length === 0 ? (
               <tr><td colSpan={7} className="text-center py-8 text-gray-400">No payment history</td></tr>
             ) : feeHistory.map((fc: any) => {
+              const isCash = fc.payment_mode === 'cash'
+              const hasPaid = (fc.paid_amount || 0) > 0
+              const isApproved = !!fc.receipt_url
+              const isPendingApproval = isCash && hasPaid && !isApproved
               const balance = fc.amount - (fc.paid_amount || 0)
-              const status = balance <= 0 ? 'Paid' : fc.paid_amount ? 'Partial' : 'Pending'
+              const status = isPendingApproval ? 'Pending Approval' : balance <= 0 ? 'Paid' : fc.paid_amount ? 'Partial' : 'Pending'
               return (
                 <tr key={fc.id}>
                   <td className="font-medium">{format(new Date(fc.month), 'MMMM yyyy')}</td>
@@ -276,7 +256,14 @@ export default function StudentFeesPage() {
                   <td className="text-green-600">{formatCurrency(fc.paid_amount || 0)}</td>
                   <td>{formatDate(fc.paid_date)}</td>
                   <td>{fc.payment_mode || '—'}</td>
-                  <td><span className={`badge ${status === 'Paid' ? 'badge-green' : status === 'Partial' ? 'badge-yellow' : 'badge-red'}`}>{status}</span></td>
+                  <td>
+                    <span className={`badge ${
+                      status === 'Paid' ? 'badge-green'
+                      : status === 'Pending Approval' ? 'badge-yellow'
+                      : status === 'Partial' ? 'badge-yellow'
+                      : 'badge-red'
+                    }`}>{status}</span>
+                  </td>
                   <td>
                     {fc.receipt_url && (
                       <Button size="sm" variant="ghost" onClick={() => downloadReceipt(fc.id)} title="Download receipt">

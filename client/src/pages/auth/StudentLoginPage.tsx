@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { PraxisMark, PraxisWordmark } from '@/components/branding/PraxisLogo'
+import { PraxisMark, CustomerName, PoweredByPraxis } from '@/components/branding/PraxisLogo'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { isConfigured } from '@/lib/supabase'
@@ -29,8 +29,8 @@ export default function StudentLoginPage() {
     <div className="min-h-screen bg-slate-900 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <PraxisMark className="w-16 h-16 rounded-2xl mb-4 mx-auto" />
-          <h1 className="text-3xl font-bold text-white"><PraxisWordmark /></h1>
+          <PraxisMark className="w-24 h-24 rounded-2xl mb-4 mx-auto bg-white p-1" />
+          <h1 className="text-2xl font-bold text-white"><CustomerName /></h1>
           <p className="text-slate-400 mt-1 text-sm">Student Portal</p>
         </div>
 
@@ -90,6 +90,11 @@ export default function StudentLoginPage() {
               ← Staff login
             </a>
           </div>
+        </div>
+
+        <div className="mt-6 text-center flex items-center justify-center gap-1.5">
+          <PraxisMark className="w-5 h-5 rounded opacity-60" />
+          <PoweredByPraxis className="text-slate-500 text-xs" />
         </div>
       </div>
     </div>
