@@ -1,0 +1,102 @@
+[
+  {
+    "scene": "intro",
+    "durationMs": 5399
+  },
+  {
+    "scene": "admin-login",
+    "durationMs": 6208
+  },
+  {
+    "scene": "admin-dashboard",
+    "durationMs": 5524
+  },
+  {
+    "scene": "admin-config-users",
+    "durationMs": 5443
+  },
+  {
+    "scene": "admin-config-fee-structures",
+    "durationMs": 5508
+  },
+  {
+    "scene": "admin-config-batches",
+    "durationMs": 4364
+  },
+  {
+    "scene": "admin-config-apparatus",
+    "durationMs": 3789
+  },
+  {
+    "scene": "admin-config-skills",
+    "durationMs": 4503
+  },
+  {
+    "scene": "register-student",
+    "durationMs": 8928
+  },
+  {
+    "scene": "welcome-email-preview",
+    "durationMs": 6263
+  },
+  {
+    "scene": "switch-to-coach",
+    "durationMs": 2994
+  },
+  {
+    "scene": "coach-attendance",
+    "durationMs": 4534
+  },
+  {
+    "scene": "coach-curriculum",
+    "durationMs": 7173
+  },
+  {
+    "scene": "switch-to-admin-2",
+    "durationMs": 4104
+  },
+  {
+    "scene": "create-competition",
+    "durationMs": 5413
+  },
+  {
+    "scene": "add-age-group",
+    "durationMs": 7208
+  },
+  {
+    "scene": "shortlist",
+    "durationMs": 10958
+  },
+  {
+    "scene": "shortlist-email-preview",
+    "durationMs": 5263
+  },
+  {
+    "scene": "switch-to-student",
+    "durationMs": 3514
+  },
+  {
+    "scene": "confirm-participation",
+    "durationMs": 9058
+  },
+  {
+    "scene": "pay-fees-online",
+    "durationMs": 8988
+  },
+  {
+    "scene": "switch-to-admin-3",
+    "durationMs": 4139
+  },
+  {
+    "scene": "cash-fee-collection",
+    "durationMs": 8148
+  },
+  {
+    "scene": "receipt-email-preview",
+    "durationMs": 7483
+  },
+  {
+    "scene": "closing",
+    "durationMs": 6758
+  }
+]

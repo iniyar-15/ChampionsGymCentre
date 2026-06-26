@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../index.js'
 import { format, startOfMonth, subMonths, startOfQuarter, startOfYear } from 'date-fns'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { saveEmailPreview } from './email-preview.js'
 
 function createTransport() {
   return nodemailer.createTransport({
@@ -14,6 +15,55 @@ function createTransport() {
       pass: process.env.SMTP_PASS,
     },
   })
+}
+
+const WELCOME_MESSAGES = [
+  'Every flip, every routine, every fall and every comeback — that\'s where champions are made. We can\'t wait to watch {name} grow! 🤸',
+  'Gymnastics teaches strength, discipline, and grace — but most of all, it teaches you that you\'re capable of more than you think. Welcome aboard, {name}!',
+  'The path to the podium starts with a single cartwheel. Here\'s to {name}\'s very first step on that journey! 🌟',
+  'Believe in yourself, {name} — every champion was once a beginner who simply refused to give up.',
+  'Strength doesn\'t come from what you can already do — it comes from overcoming what you once thought you couldn\'t. We can\'t wait to help {name} discover that strength!',
+  'Great gymnasts aren\'t born, they\'re built — one practice at a time. Welcome to the team, {name}! Let\'s get to work and have fun doing it. 🎉',
+]
+
+export async function sendWelcomeEmail(params: {
+  to: string
+  studentName: string
+  parentName: string | null
+  loginPhone: string
+  password: string
+  levelName: string | null
+}) {
+  const transport = createTransport()
+  const { to, studentName, parentName, loginPhone, password, levelName } = params
+  const firstName = studentName.split(' ')[0]
+  const message = WELCOME_MESSAGES[Math.floor(Math.random() * WELCOME_MESSAGES.length)].replace(/\{name\}/g, firstName)
+
+  const subject = `🎉 Welcome to Praxis, ${firstName}!`
+  const html = `
+      <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px">
+        <h2 style="color:#1d4ed8">Praxis</h2>
+        <p>Dear ${parentName ? parentName : `Parent/Guardian of ${studentName}`},</p>
+        <p>We're absolutely thrilled to welcome <strong>${studentName}</strong> to the Praxis family! 🤸‍♀️🤸‍♂️</p>
+        ${levelName ? `<p>${firstName} has been enrolled in our <strong>${levelName}</strong> program, and our coaches are excited to begin this journey together.</p>` : ''}
+        <div style="background:#eff6ff;border-left:4px solid #1d4ed8;padding:12px 16px;margin:20px 0;border-radius:4px">
+          <p style="margin:0;font-style:italic;color:#1e3a8a">"${message}"</p>
+        </div>
+        <h3 style="color:#1d4ed8;margin-top:24px">Your Portal Login Details</h3>
+        <table style="width:100%;border-collapse:collapse;margin:12px 0">
+          <tr><td style="padding:8px;background:#f1f5f9;font-weight:bold">Phone Number (Login ID)</td><td style="padding:8px">${loginPhone}</td></tr>
+          <tr><td style="padding:8px;background:#f1f5f9;font-weight:bold">Temporary Password</td><td style="padding:8px">${password}</td></tr>
+        </table>
+        <p>Log in to the <a href="${process.env.CLIENT_URL || 'http://localhost:5173'}">Praxis Portal</a> to view ${firstName}'s class schedule, track attendance and progress, manage fee payments, and stay updated on upcoming competitions.</p>
+        <p>If you have any questions along the way, our team is always happy to help. Here's to an amazing journey ahead — let's go make ${firstName} a champion! 🏆</p>
+        <p style="color:#64748b;font-size:12px;margin-top:24px">Praxis, ECR, Chennai</p>
+      </div>
+    `
+
+  await saveEmailPreview('welcome', subject, html)
+  await transport.sendMail({ from: process.env.SMTP_USER, to, subject, html })
+
+  console.log(`[EMAIL] Welcome email sent to ${to}`)
 }
 
 export async function sendCompetitionShortlistEmail(params: {
@@ -33,13 +83,10 @@ export async function sendCompetitionShortlistEmail(params: {
   const timeStr = startTime ? startTime.slice(0, 5) : ''
   const feeStr = entryFee ? `₹${entryFee}` : 'No entry fee'
 
-  await transport.sendMail({
-    from: process.env.SMTP_USER,
-    to,
-    subject: `🏆 You've been selected for ${competitionName}!`,
-    html: `
+  const subject = `🏆 You've been selected for ${competitionName}!`
+  const html = `
       <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px">
-        <h2 style="color:#1d4ed8">Champions Gymnastics Centre (CGC)</h2>
+        <h2 style="color:#1d4ed8">Praxis</h2>
         <p>Dear <strong>${studentName}</strong>,</p>
         <p>Congratulations! You have been selected to participate in the following competition:</p>
         <table style="width:100%;border-collapse:collapse;margin:16px 0">
@@ -49,11 +96,13 @@ export async function sendCompetitionShortlistEmail(params: {
           ${location ? `<tr><td style="padding:8px;background:#f1f5f9;font-weight:bold">Venue</td><td style="padding:8px">${location}</td></tr>` : ''}
           <tr><td style="padding:8px;background:#f1f5f9;font-weight:bold">Entry Fee</td><td style="padding:8px">${feeStr}</td></tr>
         </table>
-        <p>Please log in to the CGC portal to view full competition details.</p>
-        <p style="color:#64748b;font-size:12px">Champions Gymnastics Centre (CGC)</p>
+        <p>Please log in to the Praxis portal to view full competition details.</p>
+        <p style="color:#64748b;font-size:12px">Praxis</p>
       </div>
-    `,
-  })
+    `
+
+  await saveEmailPreview('shortlist', subject, html)
+  await transport.sendMail({ from: process.env.SMTP_USER, to, subject, html })
 }
 
 export async function sendFeeReminderEmail(params: {
@@ -70,10 +119,10 @@ export async function sendFeeReminderEmail(params: {
   await transport.sendMail({
     from: process.env.SMTP_USER,
     to,
-    subject: `${urgency === 'urgent' ? '⚠️ Action Required' : '📢 Reminder'} — Fee Due for ${month} | Champions Gymnastics Centre`,
+    subject: `${urgency === 'urgent' ? '⚠️ Action Required' : '📢 Reminder'} — Fee Due for ${month} | Praxis`,
     html: `
       <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px">
-        <h2 style="color:#1d4ed8">Champions Gymnastics Centre (CGC)</h2>
+        <h2 style="color:#1d4ed8">Praxis</h2>
         <p>Dear <strong>${studentName}</strong>,</p>
         ${urgency === 'urgent'
           ? `<p>This is a gentle reminder that your gymnastics training fee for <strong>${month}</strong> is still outstanding.</p>`
@@ -83,8 +132,8 @@ export async function sendFeeReminderEmail(params: {
           <tr><td style="padding:8px;background:#f1f5f9;font-weight:bold">Month</td><td style="padding:8px">${month}</td></tr>
           <tr><td style="padding:8px;background:#fef3c7;font-weight:bold;color:#92400e">Amount Due</td><td style="padding:8px;font-weight:bold;color:#92400e">₹${amountDue.toFixed(2)}</td></tr>
         </table>
-        <p>Please log in to the <a href="${process.env.CLIENT_URL || 'http://localhost:5173'}">CGC Portal</a> to make your payment.</p>
-        <p style="color:#64748b;font-size:12px">Champions Gymnastics Centre (CGC), ECR, Chennai</p>
+        <p>Please log in to the <a href="${process.env.CLIENT_URL || 'http://localhost:5173'}">Praxis Portal</a> to make your payment.</p>
+        <p style="color:#64748b;font-size:12px">Praxis, ECR, Chennai</p>
       </div>
     `,
   })
@@ -122,7 +171,7 @@ export async function sendReportEmail() {
 
   doc.setFontSize(18)
   doc.setFont('helvetica', 'bold')
-  doc.text('Champions Gymnastics Centre', 14, y); y += 8
+  doc.text('Praxis', 14, y); y += 8
   doc.setFontSize(12)
   doc.setFont('helvetica', 'normal')
   doc.text(`Monthly Report — ${format(prevMonth, 'MMMM yyyy')}`, 14, y); y += 6
@@ -184,10 +233,10 @@ export async function sendReportEmail() {
   await transport.sendMail({
     from: process.env.SMTP_USER,
     to: managerEmail,
-    subject: `CGC Monthly Report — ${format(prevMonth, 'MMMM yyyy')}`,
-    text: `Please find attached the monthly report for Champions Gymnastics Centre — ${format(prevMonth, 'MMMM yyyy')}.`,
+    subject: `Praxis Monthly Report — ${format(prevMonth, 'MMMM yyyy')}`,
+    text: `Please find attached the monthly report for Praxis — ${format(prevMonth, 'MMMM yyyy')}.`,
     attachments: [{
-      filename: `CGC_Report_${format(prevMonth, 'yyyy_MM')}.pdf`,
+      filename: `Praxis_Report_${format(prevMonth, 'yyyy_MM')}.pdf`,
       content: pdfBuffer,
       contentType: 'application/pdf',
     }],

@@ -26,7 +26,7 @@ export default function StudentProfilePage() {
     <div className="max-w-2xl">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
-        <p className="text-sm text-gray-500 mt-1">Your details as registered at Champions Gymnastics Centre (CGC)</p>
+        <p className="text-sm text-gray-500 mt-1">Your details as registered on Praxis</p>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">

@@ -78,7 +78,7 @@ export default function ReportsPage() {
         : 'New Students Report'
 
     doc.setFontSize(16)
-    doc.text('Champions Gymnastics Centre (CGC)', 14, 20)
+    doc.text('Praxis', 14, 20)
     doc.setFontSize(12)
     doc.text(`${title} — ${format(new Date(monthStart), 'MMMM yyyy')}`, 14, 30)
     doc.setFontSize(10)

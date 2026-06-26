@@ -1,0 +1,158 @@
+{
+  "videoEndMs": 157736,
+  "placement": [
+    {
+      "scene": "intro",
+      "start": 0,
+      "durationMs": 5399,
+      "end": 5399
+    },
+    {
+      "scene": "admin-login",
+      "start": 5699,
+      "durationMs": 6208,
+      "end": 11907
+    },
+    {
+      "scene": "admin-dashboard",
+      "start": 12207,
+      "durationMs": 5524,
+      "end": 17731
+    },
+    {
+      "scene": "admin-config-users",
+      "start": 18031,
+      "durationMs": 5443,
+      "end": 23474
+    },
+    {
+      "scene": "admin-config-fee-structures",
+      "start": 23774,
+      "durationMs": 5508,
+      "end": 29282
+    },
+    {
+      "scene": "admin-config-batches",
+      "start": 29582,
+      "durationMs": 4364,
+      "end": 33946
+    },
+    {
+      "scene": "admin-config-apparatus",
+      "start": 34246,
+      "durationMs": 3789,
+      "end": 38035
+    },
+    {
+      "scene": "admin-config-skills",
+      "start": 38335,
+      "durationMs": 4503,
+      "end": 42838
+    },
+    {
+      "scene": "register-student",
+      "start": 43138,
+      "durationMs": 8928,
+      "end": 52066
+    },
+    {
+      "scene": "welcome-email-preview",
+      "start": 52366,
+      "durationMs": 6263,
+      "end": 58629
+    },
+    {
+      "scene": "switch-to-coach",
+      "start": 58929,
+      "durationMs": 2994,
+      "end": 61923
+    },
+    {
+      "scene": "coach-attendance",
+      "start": 62223,
+      "durationMs": 4534,
+      "end": 66757
+    },
+    {
+      "scene": "coach-curriculum",
+      "start": 67057,
+      "durationMs": 7173,
+      "end": 74230
+    },
+    {
+      "scene": "switch-to-admin-2",
+      "start": 74530,
+      "durationMs": 4104,
+      "end": 78634
+    },
+    {
+      "scene": "create-competition",
+      "start": 78934,
+      "durationMs": 5413,
+      "end": 84347
+    },
+    {
+      "scene": "add-age-group",
+      "start": 84647,
+      "durationMs": 7208,
+      "end": 91855
+    },
+    {
+      "scene": "shortlist",
+      "start": 92155,
+      "durationMs": 10958,
+      "end": 103113
+    },
+    {
+      "scene": "shortlist-email-preview",
+      "start": 103413,
+      "durationMs": 5263,
+      "end": 108676
+    },
+    {
+      "scene": "switch-to-student",
+      "start": 108976,
+      "durationMs": 3514,
+      "end": 112490
+    },
+    {
+      "scene": "confirm-participation",
+      "start": 112790,
+      "durationMs": 9058,
+      "end": 121848
+    },
+    {
+      "scene": "pay-fees-online",
+      "start": 122148,
+      "durationMs": 8988,
+      "end": 131136
+    },
+    {
+      "scene": "switch-to-admin-3",
+      "start": 131436,
+      "durationMs": 4139,
+      "end": 135575
+    },
+    {
+      "scene": "cash-fee-collection",
+      "start": 135875,
+      "durationMs": 8148,
+      "end": 144023
+    },
+    {
+      "scene": "receipt-email-preview",
+      "start": 149169,
+      "durationMs": 7483,
+      "end": 156652
+    },
+    {
+      "scene": "closing",
+      "start": 156952,
+      "durationMs": 6758,
+      "end": 163710
+    }
+  ],
+  "lastEnd": 164010,
+  "freezeExtensionMs": 6274,
+  "finalVideoMs": 164010
+}

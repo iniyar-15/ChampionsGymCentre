@@ -1,0 +1,106 @@
+[
+  {
+    "scene": "intro",
+    "t": 0
+  },
+  {
+    "scene": "admin-login",
+    "t": 3630
+  },
+  {
+    "scene": "admin-dashboard",
+    "t": 10122
+  },
+  {
+    "scene": "admin-config-users",
+    "t": 14164
+  },
+  {
+    "scene": "admin-config-fee-structures",
+    "t": 18935
+  },
+  {
+    "scene": "admin-config-batches",
+    "t": 21441
+  },
+  {
+    "scene": "admin-config-apparatus",
+    "t": 26355
+  },
+  {
+    "scene": "admin-config-skills",
+    "t": 28883
+  },
+  {
+    "scene": "register-student",
+    "t": 31482
+  },
+  {
+    "scene": "welcome-email-preview",
+    "t": 41680
+  },
+  {
+    "scene": "switch-to-coach",
+    "t": 47046
+  },
+  {
+    "scene": "coach-attendance",
+    "t": 50874
+  },
+  {
+    "scene": "coach-curriculum",
+    "t": 57198
+  },
+  {
+    "scene": "switch-to-admin-2",
+    "t": 65525
+  },
+  {
+    "scene": "create-competition",
+    "t": 69514
+  },
+  {
+    "scene": "add-age-group",
+    "t": 75592
+  },
+  {
+    "scene": "shortlist",
+    "t": 83369
+  },
+  {
+    "scene": "shortlist-email-preview",
+    "t": 97499
+  },
+  {
+    "scene": "switch-to-student",
+    "t": 102836
+  },
+  {
+    "scene": "confirm-participation",
+    "t": 106343
+  },
+  {
+    "scene": "pay-fees-online",
+    "t": 115531
+  },
+  {
+    "scene": "switch-to-admin-3",
+    "t": 126158
+  },
+  {
+    "scene": "cash-fee-collection",
+    "t": 129732
+  },
+  {
+    "scene": "receipt-email-preview",
+    "t": 149169
+  },
+  {
+    "scene": "closing",
+    "t": 154519
+  },
+  {
+    "scene": "end",
+    "t": 157736
+  }
+]

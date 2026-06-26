@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable'
 import nodemailer from 'nodemailer'
 import { format } from 'date-fns'
 import { supabaseAdmin } from '../index.js'
+import { saveEmailPreview } from './email-preview.js'
 
 // ─── Amount to Indian words ───────────────────────────────────────────────────
 const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
@@ -38,7 +39,7 @@ function amountToWords(amount: number): string {
 function receiptNo(id: string, createdAt: string): string {
   const year = new Date(createdAt).getFullYear()
   const seq = id.replace(/-/g, '').slice(-6).toUpperCase()
-  return `CGC-${year}-${seq}`
+  return `PRX-${year}-${seq}`
 }
 
 // ─── Generate and email receipt ───────────────────────────────────────────────
@@ -100,7 +101,7 @@ export async function generateAndEmailFeeReceipt(feeCollectionId: string): Promi
   doc.setFontSize(18)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(15, 41, 81) // navy
-  doc.text('CHAMPIONS GYMNASTICS CENTER', W / 2, y, { align: 'center' })
+  doc.text('PRAXIS', W / 2, y, { align: 'center' })
   y += 6
   doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
@@ -261,13 +262,10 @@ export async function generateAndEmailFeeReceipt(feeCollectionId: string): Promi
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
   })
 
-  await transport.sendMail({
-    from: process.env.SMTP_USER,
-    to: student.email,
-    subject: `Fee Receipt — ${monthStr} | Champions Gymnastics Center`,
-    html: `
+  const subject = `Fee Receipt — ${monthStr} | Praxis`
+  const html = `
       <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px">
-        <h2 style="color:#0f2951">Champions Gymnastics Center</h2>
+        <h2 style="color:#0f2951">Praxis</h2>
         <p>Dear <strong>${student.name}</strong>,</p>
         <p>Please find attached your fee receipt for <strong>${monthStr}</strong>.</p>
         <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px">
@@ -276,9 +274,16 @@ export async function generateAndEmailFeeReceipt(feeCollectionId: string): Promi
           <tr><td style="padding:6px;background:#e6ecf5;font-weight:bold">Payment Mode</td><td style="padding:6px">${payMode}</td></tr>
           <tr><td style="padding:6px;background:#e6ecf5;font-weight:bold">Date</td><td style="padding:6px">${dateStr}</td></tr>
         </table>
-        <p style="color:#64748b;font-size:12px">Champions Gymnastics Center, ECR, Chennai</p>
+        <p style="color:#64748b;font-size:12px">Praxis, ECR, Chennai</p>
       </div>
-    `,
+    `
+
+  await saveEmailPreview('receipt', subject, html)
+  await transport.sendMail({
+    from: process.env.SMTP_USER,
+    to: student.email,
+    subject,
+    html,
     attachments: [{
       filename: `Fee_Receipt_${rNo}.pdf`,
       content: pdfBuffer,

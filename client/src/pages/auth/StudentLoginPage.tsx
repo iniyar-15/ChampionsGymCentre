@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import logoImg from '@/assets/logo.webp'
+import { PraxisMark, PraxisWordmark } from '@/components/branding/PraxisLogo'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { isConfigured } from '@/lib/supabase'
@@ -29,8 +29,8 @@ export default function StudentLoginPage() {
     <div className="min-h-screen bg-slate-900 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <img src={logoImg} alt="Champions Gymnastics Centre (CGC)" className="w-16 h-16 rounded-2xl object-contain mb-4" />
-          <h1 className="text-2xl font-bold text-white">Champions Gymnastics Centre (CGC)</h1>
+          <PraxisMark className="w-16 h-16 rounded-2xl mb-4 mx-auto" />
+          <h1 className="text-3xl font-bold text-white"><PraxisWordmark /></h1>
           <p className="text-slate-400 mt-1 text-sm">Student Portal</p>
         </div>
 

@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import logoImg from '@/assets/logo.webp'
+import { PraxisMark, PraxisWordmark } from '@/components/branding/PraxisLogo'
 import { useAuth } from '@/context/AuthContext'
 import { useQuery } from '@tanstack/react-query'
 import { cn, calculateAge } from '@/lib/utils'
@@ -94,10 +94,10 @@ export default function Sidebar() {
       {/* Brand */}
       <div className="px-4 py-5 border-b border-slate-700">
         <div className="flex items-center gap-3">
-          <img src={logoImg} alt="Champions Gymnastics Centre (CGC)" className="w-9 h-9 rounded-lg object-contain flex-shrink-0" />
+          <PraxisMark className="w-9 h-9 rounded-lg flex-shrink-0" />
           <div className="overflow-hidden">
-            <p className="text-white font-semibold text-sm truncate">Champions Gymnastics</p>
-            <p className="text-slate-400 text-xs truncate">Centre (CGC)</p>
+            <p className="text-white font-semibold text-lg truncate"><PraxisWordmark /></p>
+            <p className="text-slate-400 text-xs truncate">Academy Management</p>
           </div>
         </div>
       </div>

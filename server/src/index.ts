@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
+import path from 'path'
 import { createClient } from '@supabase/supabase-js'
 import { setupScheduledJobs } from './scheduler.js'
 import competitionRoutes from './routes/competitions.js'
@@ -18,6 +19,9 @@ export const supabaseAdmin = createClient(
 
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173' }))
 app.use(express.json())
+
+// ─── Dev convenience: preview most recently sent emails ───────────────────────
+app.use('/email-previews', express.static(path.join(process.cwd(), 'email-previews')))
 
 // ─── Auth Routes ──────────────────────────────────────────────────────────────
 app.post('/api/auth/create-user', async (req, res) => {
@@ -61,6 +65,25 @@ app.post('/api/auth/create-student', async (req, res) => {
     .single()
 
   if (dbError) return res.status(400).json({ error: dbError.message })
+
+  // Welcome email for newly registered students
+  if (student.email) {
+    let levelName: string | null = null
+    if (student.level_id) {
+      const { data: level } = await supabaseAdmin.from('levels').select('name').eq('id', student.level_id).single()
+      levelName = level?.name || null
+    }
+    const { sendWelcomeEmail } = await import('./services/email.js')
+    sendWelcomeEmail({
+      to: student.email,
+      studentName: student.name,
+      parentName: student.parent_name,
+      loginPhone: phone,
+      password,
+      levelName,
+    }).catch(e => console.error('[WELCOME EMAIL]', e.message))
+  }
+
   return res.json({ student })
 })
 
@@ -284,5 +307,5 @@ async function sendMonthlyReports() {
 }
 
 app.listen(PORT, () => {
-  console.log(`CGC Server running on port ${PORT}`)
+  console.log(`Praxis Server running on port ${PORT}`)
 })

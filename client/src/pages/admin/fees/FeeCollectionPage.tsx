@@ -131,7 +131,7 @@ export default function FeeCollectionPage() {
     const res = await fetch(`${API_URL}/api/fee/${id}/receipt-download`)
     const json = await res.json()
     if (!res.ok || !json.url) { alert(json.error || 'No receipt available'); return }
-    window.open(json.url, '_blank')
+    window.location.href = json.url
   }
 
   const deleteMutation = useMutation({

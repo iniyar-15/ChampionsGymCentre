@@ -148,7 +148,7 @@ export default function StudentFeesPage() {
       key: keyId,
       amount: order.amount,
       currency: order.currency,
-      name: 'Champions Gymnastics Centre',
+      name: 'Praxis',
       description: `Fee for ${format(new Date(selectedMonth + '-01'), 'MMMM yyyy')}`,
       order_id: order.orderId,
       prefill: {
@@ -188,7 +188,7 @@ export default function StudentFeesPage() {
     const res = await fetch(`${API_URL}/api/fee/${id}/receipt-download`)
     const json = await res.json()
     if (!res.ok || !json.url) { alert('Receipt not available yet'); return }
-    window.open(json.url, '_blank')
+    window.location.href = json.url
   }
 
   function openPayModal() {

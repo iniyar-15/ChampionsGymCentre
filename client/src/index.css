@@ -25,13 +25,13 @@
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
 
-    /* Brand colours for CGC */
-    --cgc-primary: #1a56db;
-    --cgc-primary-dark: #1e429f;
-    --cgc-gold: #d97706;
-    --cgc-sidebar-bg: #1e293b;
-    --cgc-sidebar-text: #cbd5e1;
-    --cgc-sidebar-active: #3b82f6;
+    /* Brand colours for Praxis */
+    --praxis-primary: #1a56db;
+    --praxis-primary-dark: #1e429f;
+    --praxis-gold: #d97706;
+    --praxis-sidebar-bg: #1e293b;
+    --praxis-sidebar-text: #cbd5e1;
+    --praxis-sidebar-active: #3b82f6;
   }
 
   * {
