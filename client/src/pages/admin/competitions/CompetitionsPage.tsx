@@ -11,7 +11,7 @@ import { FormField, Input, Select } from '@/components/ui/FormField'
 import { formatDate, calculateAge } from '@/lib/utils'
 import ShortlistModal from './ShortlistModal'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const API_URL = import.meta.env.VITE_API_URL ?? ''
 
 type AgeGroupFull = {
   id: string

@@ -2,11 +2,16 @@ import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
 import path from 'path'
+import fs from 'fs'
+import { fileURLToPath } from 'url'
 import { createClient } from '@supabase/supabase-js'
 import { setupScheduledJobs } from './scheduler.js'
 import competitionRoutes from './routes/competitions.js'
 
 dotenv.config()
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -17,11 +22,24 @@ export const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 )
 
-app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173' }))
+// ─── CORS: support comma-separated list of allowed origins ────────────────────
+const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+  .split(',').map(s => s.trim())
+
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.some(o => origin.startsWith(o))) cb(null, true)
+    else cb(new Error(`CORS: origin ${origin} not allowed`))
+  },
+  credentials: true,
+}))
 app.use(express.json())
 
+// ─── Health check (Azure App Service + load balancer probes) ─────────────────
+app.get('/health', (_req, res) => res.json({ status: 'ok', ts: new Date().toISOString() }))
+
 // ─── Dev convenience: preview most recently sent emails ───────────────────────
-app.use('/email-previews', express.static(path.join(process.cwd(), 'email-previews')))
+app.use('/email-previews', express.static(path.join(__dirname, '../email-previews')))
 
 // ─── Auth Routes ──────────────────────────────────────────────────────────────
 app.post('/api/auth/create-user', async (req, res) => {
@@ -298,6 +316,14 @@ app.post('/api/reports/send-monthly', async (req, res) => {
   }
 })
 
+// ─── Serve React frontend in production ──────────────────────────────────────
+const clientDist = path.join(__dirname, '../../client/dist')
+if (fs.existsSync(clientDist)) {
+  app.use(express.static(clientDist))
+  app.get(/(.*)/, (_req, res) => res.sendFile(path.join(clientDist, 'index.html')))
+  console.log(`[STATIC] Serving frontend from ${clientDist}`)
+}
+
 // ─── Scheduled jobs ───────────────────────────────────────────────────────────
 setupScheduledJobs()
 
@@ -307,5 +333,5 @@ async function sendMonthlyReports() {
 }
 
 app.listen(PORT, () => {
-  console.log(`Praxis Server running on port ${PORT}`)
+  console.log(`CGC Server running on port ${PORT}`)
 })

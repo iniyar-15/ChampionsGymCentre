@@ -2,7 +2,9 @@ import nodemailer from 'nodemailer'
 import { supabaseAdmin } from '../index.js'
 import { format, startOfMonth, subMonths, startOfQuarter, startOfYear } from 'date-fns'
 import { jsPDF } from 'jspdf'
-import autoTable from 'jspdf-autotable'
+import autoTableModule from 'jspdf-autotable'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const autoTable: any = (autoTableModule as any).default ?? autoTableModule
 import { saveEmailPreview } from './email-preview.js'
 
 const GYM_NAME = process.env.GYM_NAME || 'Champions Gymnastics Center'

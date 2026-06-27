@@ -11,7 +11,7 @@ import Button from '@/components/ui/Button'
 import { FormField, Input, Select } from '@/components/ui/FormField'
 import { calculateAge, formatDate, GENDER_OPTIONS } from '@/lib/utils'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const API_URL = import.meta.env.VITE_API_URL ?? ''
 
 type StudentFull = StudentRow & {
   levels: { name: string } | null

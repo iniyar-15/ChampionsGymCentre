@@ -8,7 +8,7 @@ import Button from '@/components/ui/Button'
 import { FormField, Select } from '@/components/ui/FormField'
 import { PAYMENT_MODES } from '@/lib/utils'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const API_URL = import.meta.env.VITE_API_URL ?? ''
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   shortlisted: { label: 'Shortlisted',  cls: 'bg-blue-100 text-blue-700' },

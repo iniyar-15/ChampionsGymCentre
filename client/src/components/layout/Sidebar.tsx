@@ -9,7 +9,7 @@ import {
   MessageSquare, BarChart3, User, CreditCard, LogOut
 } from 'lucide-react'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const API_URL = import.meta.env.VITE_API_URL ?? ''
 
 const adminNav = [
   { label: 'Dashboard', to: '/admin', icon: LayoutDashboard, end: true },

@@ -11,7 +11,7 @@ import { Download, CreditCard } from 'lucide-react'
 
 type StaffMember = { id: string; user_name: string; role: string }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const API_URL = import.meta.env.VITE_API_URL ?? ''
 
 export default function StudentFeesPage() {
   const qc = useQueryClient()

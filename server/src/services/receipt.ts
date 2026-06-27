@@ -1,5 +1,7 @@
 import { jsPDF } from 'jspdf'
-import autoTable from 'jspdf-autotable'
+import autoTableModule from 'jspdf-autotable'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const autoTable: any = (autoTableModule as any).default ?? autoTableModule
 import nodemailer from 'nodemailer'
 import { format } from 'date-fns'
 import { supabaseAdmin } from '../index.js'

@@ -6,7 +6,7 @@ import Button from '@/components/ui/Button'
 import { Search, CheckSquare, Square } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const API_URL = import.meta.env.VITE_API_URL ?? ''
 
 type AgeGroupFull = {
   id: string

@@ -7,7 +7,10 @@
     "dev:client": "cd client && npm run dev",
     "dev:server": "cd server && npm run dev",
     "build": "cd client && npm run build && cd ../server && npm run build",
-    "install:all": "npm install && cd client && npm install && cd ../server && npm install"
+    "start": "cd server && npm start",
+    "install:all": "npm install && cd client && npm install && cd ../server && npm install",
+    "azure:install": "cd client && npm install && cd ../server && npm install",
+    "azure:build": "cd client && npm run build && cd ../server && npm run build"
   },
   "devDependencies": {
     "concurrently": "^9.0.1",

@@ -13,7 +13,7 @@ import { formatCurrency, formatDate, PAYMENT_MODES } from '@/lib/utils'
 import { format, startOfMonth, subMonths, addMonths } from 'date-fns'
 import { useAuth } from '@/context/AuthContext'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const API_URL = import.meta.env.VITE_API_URL ?? ''
 
 type FeeCollectionFull = FeeCollectionRow & {
   students: { name: string; contact_phone: string } | null

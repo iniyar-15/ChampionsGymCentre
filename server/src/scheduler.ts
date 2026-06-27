@@ -4,6 +4,12 @@ import { format, startOfMonth, getDaysInMonth } from 'date-fns'
 import { sendReportEmail, sendFeeReminderEmail } from './services/email.js'
 
 export function setupScheduledJobs() {
+  if (process.env.CRON_ENABLED !== 'true') {
+    console.log('[SCHEDULER] Cron disabled — set CRON_ENABLED=true on one instance to enable')
+    return
+  }
+
+  console.log('[SCHEDULER] Cron enabled')
 
   // ─── 1st of month: auto-create fee bills for all active students ─────────────
   cron.schedule('1 0 1 * *', async () => {
@@ -22,6 +28,12 @@ export function setupScheduledJobs() {
     } catch (e) {
       console.error('[REPORTS] Failed to send monthly reports:', e)
     }
+  })
+
+  // ─── Supabase keepalive — ping every 5 days to prevent free-tier auto-pause ──
+  cron.schedule('0 8 */5 * *', async () => {
+    const { data, error } = await supabaseAdmin.from('users').select('id').limit(1)
+    console.log('[KEEPALIVE] Supabase ping:', error ? `failed — ${error.message}` : 'ok')
   })
 }
 
