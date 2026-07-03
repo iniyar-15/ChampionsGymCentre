@@ -140,25 +140,22 @@ app.post('/api/fee', async (req, res) => {
           cash_received_by } = req.body
   if (!student_id || !amount) return res.status(400).json({ error: 'student_id and amount required' })
 
+  const paidAmt = paid_amount || 0
+  const status = paidAmt > 0 ? 'submitted' : 'pending'
+
   const { data, error } = await supabaseAdmin
     .from('fee_collections')
     .insert({ month, student_id, fee_structure_id: fee_structure_id || null,
-              amount, paid_amount: paid_amount || 0,
+              amount, paid_amount: paidAmt,
               paid_date: paid_date || null, payment_mode: payment_mode || null,
               reference_id: reference_id || null, notes: notes || null,
               created_by: created_by || null,
-              cash_received_by: cash_received_by || null })
+              cash_received_by: cash_received_by || null,
+              status })
     .select('id')
     .single()
 
   if (error) return res.status(400).json({ error: error.message })
-
-  // No receipt for cash payments
-  if ((paid_amount || 0) > 0 && payment_mode !== 'cash') {
-    const { generateAndEmailFeeReceipt } = await import('./services/receipt.js')
-    generateAndEmailFeeReceipt(data.id).catch(e => console.error('[RECEIPT]', e.message))
-  }
-
   return res.json({ id: data.id })
 })
 
@@ -168,24 +165,23 @@ app.put('/api/fee/:id', async (req, res) => {
           paid_date, payment_mode, reference_id, notes, created_by,
           cash_received_by } = req.body
 
+  const { data: current } = await supabaseAdmin
+    .from('fee_collections').select('status').eq('id', req.params.id).single()
+  const paidAmt = paid_amount || 0
+  const newStatus = current?.status === 'verified' ? 'verified' : paidAmt > 0 ? 'submitted' : 'pending'
+
   const { error } = await supabaseAdmin
     .from('fee_collections')
     .update({ month, student_id, fee_structure_id: fee_structure_id || null,
-              amount, paid_amount: paid_amount || 0,
+              amount, paid_amount: paidAmt,
               paid_date: paid_date || null, payment_mode: payment_mode || null,
               reference_id: reference_id || null, notes: notes || null,
               created_by: created_by || null,
-              cash_received_by: cash_received_by || null })
+              cash_received_by: cash_received_by || null,
+              status: newStatus })
     .eq('id', req.params.id)
 
   if (error) return res.status(400).json({ error: error.message })
-
-  // No receipt for cash payments
-  if ((paid_amount || 0) > 0 && payment_mode !== 'cash') {
-    const { generateAndEmailFeeReceipt } = await import('./services/receipt.js')
-    generateAndEmailFeeReceipt(req.params.id).catch(e => console.error('[RECEIPT]', e.message))
-  }
-
   return res.json({ id: req.params.id })
 })
 
@@ -304,6 +300,78 @@ app.get('/api/fee/:id/receipt-download', async (req, res) => {
 
   if (error || !data?.signedUrl) return res.status(500).json({ error: 'Could not generate download link' })
   return res.json({ url: data.signedUrl })
+})
+
+// ─── Payment config ───────────────────────────────────────────────────────────
+app.get('/api/payment-config', async (_req, res) => {
+  const { data, error } = await supabaseAdmin.from('payment_config').select('*').limit(1).maybeSingle()
+  if (error) return res.status(400).json({ error: error.message })
+  return res.json(data || {})
+})
+
+app.put('/api/payment-config', async (req, res) => {
+  const { upi_id, upi_name, upi_qr_url, bank_name, account_number, ifsc_code, account_holder, branch } = req.body
+  const { data: existing } = await supabaseAdmin.from('payment_config').select('id').limit(1).maybeSingle()
+  if (existing) {
+    const { error } = await supabaseAdmin.from('payment_config')
+      .update({ upi_id, upi_name, upi_qr_url, bank_name, account_number, ifsc_code, account_holder, branch, updated_at: new Date().toISOString() })
+      .eq('id', existing.id)
+    if (error) return res.status(400).json({ error: error.message })
+  } else {
+    const { error } = await supabaseAdmin.from('payment_config')
+      .insert({ upi_id, upi_name, upi_qr_url, bank_name, account_number, ifsc_code, account_holder, branch })
+    if (error) return res.status(400).json({ error: error.message })
+  }
+  return res.json({ success: true })
+})
+
+// ─── Fee: verify single payment + send receipt ────────────────────────────────
+app.post('/api/fee/:id/verify', async (req, res) => {
+  const { error } = await supabaseAdmin
+    .from('fee_collections')
+    .update({ status: 'verified', verified_at: new Date().toISOString() })
+    .eq('id', req.params.id)
+  if (error) return res.status(400).json({ error: error.message })
+  try {
+    const { generateAndEmailFeeReceipt } = await import('./services/receipt.js')
+    await generateAndEmailFeeReceipt(req.params.id)
+  } catch (e: any) {
+    console.error('[RECEIPT]', e.message)
+  }
+  return res.json({ success: true })
+})
+
+// ─── Fee: batch verify + send receipts (reconciliation) ──────────────────────
+app.post('/api/fee/batch-verify', async (req, res) => {
+  const { ids } = req.body as { ids: string[] }
+  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids required' })
+  const results = await Promise.allSettled(ids.map(async (id) => {
+    await supabaseAdmin.from('fee_collections')
+      .update({ status: 'verified', verified_at: new Date().toISOString() }).eq('id', id)
+    const { generateAndEmailFeeReceipt } = await import('./services/receipt.js')
+    await generateAndEmailFeeReceipt(id)
+  }))
+  return res.json({
+    succeeded: results.filter(r => r.status === 'fulfilled').length,
+    failed: results.filter(r => r.status === 'rejected').length,
+  })
+})
+
+// ─── Fee: pending submitted payments for reconciliation ───────────────────────
+app.get('/api/fee/pending-verification', async (req, res) => {
+  const { from, to } = req.query as Record<string, string>
+  let query = supabaseAdmin
+    .from('fee_collections')
+    .select('*, students(name, email, contact_phone)')
+    .eq('status', 'submitted')
+    .in('payment_mode', ['upi', 'bank_transfer'])
+    .gt('paid_amount', 0)
+    .order('paid_date', { ascending: false })
+  if (from) query = query.gte('paid_date', from)
+  if (to) query = query.lte('paid_date', to)
+  const { data, error } = await query
+  if (error) return res.status(400).json({ error: error.message })
+  return res.json(data || [])
 })
 
 // ─── Reports email endpoint ────────────────────────────────────────────────────

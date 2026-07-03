@@ -8,7 +8,7 @@ const autoTable: any = (autoTableModule as any).default ?? autoTableModule
 import { saveEmailPreview } from './email-preview.js'
 
 const GYM_NAME = process.env.GYM_NAME || 'Champions Gymnastics Center'
-const GYM_HEADER = `<h2 style="color:#1d4ed8;margin:0 0 4px">${GYM_NAME}</h2><p style="font-size:11px;color:#94a3b8;margin:0 0 16px">Powered by Praxis</p>`
+const GYM_HEADER = `<h2 style="color:#1d4ed8;margin:0 0 4px">${GYM_NAME}</h2><p style="font-size:11px;color:#94a3b8;margin:0 0 16px">${GYM_NAME}</p>`
 
 function createTransport() {
   return nodemailer.createTransport({

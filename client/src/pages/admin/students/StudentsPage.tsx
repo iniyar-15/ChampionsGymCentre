@@ -9,7 +9,8 @@ import Modal from '@/components/ui/Modal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import Button from '@/components/ui/Button'
 import { FormField, Input, Select } from '@/components/ui/FormField'
-import { calculateAge, formatDate, GENDER_OPTIONS } from '@/lib/utils'
+import { calculateAge, formatDate, GENDER_OPTIONS, BLOOD_GROUPS } from '@/lib/utils'
+import { getDaysInMonth, isSameMonth, parseISO } from 'date-fns'
 
 const API_URL = import.meta.env.VITE_API_URL ?? ''
 
@@ -23,6 +24,17 @@ const emptyForm = {
   name: '', parent_name: '', contact_phone: '', secondary_phone: '',
   email: '', date_of_birth: '', gender: '' as string, school: '',
   level_id: '', fee_structure_id: '', batch_ids: [] as string[],
+  start_date: '', blood_group: '',
+}
+
+function calcProratedFee(fee: number, startDate: string): number | null {
+  if (!startDate || !fee) return null
+  const start = parseISO(startDate)
+  const today = new Date()
+  if (!isSameMonth(start, today)) return null
+  const daysInMonth = getDaysInMonth(start)
+  const remaining = daysInMonth - start.getDate() + 1
+  return Math.round((fee / daysInMonth) * remaining)
 }
 
 export default function StudentsPage() {
@@ -88,6 +100,8 @@ export default function StudentsPage() {
         school: form.school || null,
         level_id: form.level_id || null,
         fee_structure_id: form.fee_structure_id || null,
+        start_date: form.start_date || null,
+        blood_group: form.blood_group || null,
       }
 
       let studentId = editing?.id
@@ -137,6 +151,8 @@ export default function StudentsPage() {
       gender: s.gender || '', school: s.school || '', level_id: s.level_id || '',
       fee_structure_id: s.fee_structure_id || '',
       batch_ids: s.student_batches?.map((sb: any) => sb.batch_id) || [],
+      start_date: (s as any).start_date || '',
+      blood_group: (s as any).blood_group || '',
     })
     setFormError('')
     setModalOpen(true)
@@ -254,10 +270,33 @@ export default function StudentsPage() {
                 {GENDER_OPTIONS.map(g => <option key={g} value={g}>{g.charAt(0).toUpperCase() + g.slice(1)}</option>)}
               </Select>
             </FormField>
+            <FormField label="Blood Group">
+              <Select value={form.blood_group} onChange={e => setForm(f => ({ ...f, blood_group: e.target.value }))}>
+                <option value="">— Select —</option>
+                {BLOOD_GROUPS.map(bg => <option key={bg} value={bg}>{bg}</option>)}
+              </Select>
+            </FormField>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <FormField label="Start Date" hint="Used to calculate prorated fee for first month">
+              <Input type="date" value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} />
+            </FormField>
             <FormField label="School">
               <Input value={form.school} onChange={e => setForm(f => ({ ...f, school: e.target.value }))} />
             </FormField>
           </div>
+
+          {(() => {
+            const fs = feeStructures.find(f => f.id === form.fee_structure_id)
+            const prorated = fs && form.start_date ? calcProratedFee(fs.amount, form.start_date) : null
+            if (!prorated) return null
+            return (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                First month prorated fee: <strong>₹{prorated}</strong> (joining {form.start_date}, full fee ₹{fs!.amount}/mo)
+              </div>
+            )
+          })()}
 
           <div className="grid grid-cols-2 gap-4">
             <FormField label="Level">

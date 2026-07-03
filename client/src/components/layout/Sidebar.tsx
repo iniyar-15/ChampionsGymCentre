@@ -6,7 +6,7 @@ import { cn, calculateAge } from '@/lib/utils'
 import {
   LayoutDashboard, Users, GraduationCap, Calendar, Layers, Dumbbell,
   Award, Trophy, Wallet, FileText, ClipboardList, BookOpen,
-  MessageSquare, BarChart3, User, CreditCard, LogOut
+  MessageSquare, BarChart3, User, CreditCard, LogOut, Settings2, GitMerge
 } from 'lucide-react'
 
 const API_URL = import.meta.env.VITE_API_URL ?? ''
@@ -22,6 +22,8 @@ const adminNav = [
   { label: 'Competitions', to: '/admin/competitions', icon: Trophy },
   { label: 'Fee Structures', to: '/admin/fee-structures', icon: Wallet },
   { label: 'Fee Collection', to: '/admin/fee-collection', icon: CreditCard },
+  { label: 'Reconcile Payments', to: '/admin/reconcile', icon: GitMerge },
+  { label: 'Payment Config', to: '/admin/payment-config', icon: Settings2 },
   { label: 'Reports', to: '/admin/reports', icon: BarChart3 },
 ]
 

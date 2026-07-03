@@ -46,7 +46,10 @@ export function dobToDefaultPassword(dob: string): string {
 export const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 export type DayOfWeek = (typeof DAYS_OF_WEEK)[number]
 
-export const PAYMENT_MODES = ['cash', 'upi', 'online', 'bank_transfer'] as const
+export const PAYMENT_MODES = ['cash', 'upi', 'bank_transfer'] as const
 export type PaymentMode = (typeof PAYMENT_MODES)[number]
 
 export const GENDER_OPTIONS = ['male', 'female', 'other'] as const
+
+export const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'] as const
+export type BloodGroup = (typeof BLOOD_GROUPS)[number]

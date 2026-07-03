@@ -4,8 +4,26 @@ import autoTableModule from 'jspdf-autotable'
 const autoTable: any = (autoTableModule as any).default ?? autoTableModule
 import nodemailer from 'nodemailer'
 import { format } from 'date-fns'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import { supabaseAdmin } from '../index.js'
 import { saveEmailPreview } from './email-preview.js'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname  = path.dirname(__filename)
+
+const GYM_NAME    = process.env.GYM_NAME    || 'Champions Gymnastics Center'
+const GYM_ADDRESS = process.env.GYM_ADDRESS || 'ECR, Chennai, Tamil Nadu'
+
+function loadLogoBase64(): string | null {
+  try {
+    const logoPath = path.join(__dirname, '../../assets/logo.webp')
+    if (fs.existsSync(logoPath)) return fs.readFileSync(logoPath).toString('base64')
+  } catch { /* logo not available */ }
+  return null
+}
+const LOGO_B64 = loadLogoBase64()
 
 // ─── Amount to Indian words ───────────────────────────────────────────────────
 const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
@@ -41,7 +59,7 @@ function amountToWords(amount: number): string {
 function receiptNo(id: string, createdAt: string): string {
   const year = new Date(createdAt).getFullYear()
   const seq = id.replace(/-/g, '').slice(-6).toUpperCase()
-  return `PRX-${year}-${seq}`
+  return `CGC-${year}-${seq}`
 }
 
 // ─── Generate and email receipt ───────────────────────────────────────────────
@@ -99,20 +117,27 @@ export async function generateAndEmailFeeReceipt(feeCollectionId: string): Promi
   doc.line(margin, y, W - margin, y)
   y += 7
 
-  // Header
-  doc.setFontSize(18)
+  // Header - logo + gym name
+  const hdrY  = y
+  const LOGO_H = 18
+
+  if (LOGO_B64) {
+    try {
+      doc.addImage(`data:image/webp;base64,${LOGO_B64}`, 'WEBP', margin, hdrY, LOGO_H, LOGO_H)
+    } catch { /* skip if image fails */ }
+  }
+
+  doc.setFontSize(15)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(15, 41, 81) // navy
-  doc.text('PRAXIS', W / 2, y, { align: 'center' })
-  y += 6
+  doc.setTextColor(15, 41, 81)
+  doc.text(GYM_NAME.toUpperCase(), W / 2, hdrY + 7, { align: 'center' })
   doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(80, 80, 80)
-  doc.text('ECR, Chennai, Tamil Nadu', W / 2, y, { align: 'center' })
-  y += 4.5
+  doc.text(GYM_ADDRESS, W / 2, hdrY + 12, { align: 'center' })
   doc.setFont('helvetica', 'bold')
-  doc.text(`GSTIN: ${gstin}   |   SAC Code: 999294`, W / 2, y, { align: 'center' })
-  y += 6
+  doc.text(`GSTIN: ${gstin}   |   SAC Code: 999294`, W / 2, hdrY + 17, { align: 'center' })
+  y = hdrY + (LOGO_B64 ? LOGO_H + 2 : 16)
 
   // Gold divider
   doc.setDrawColor(184, 149, 64)
@@ -264,10 +289,17 @@ export async function generateAndEmailFeeReceipt(feeCollectionId: string): Promi
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
   })
 
-  const subject = `Fee Receipt — ${monthStr} | Praxis`
+  const subject  = `Fee Receipt — ${monthStr} | ${GYM_NAME}`
+  const logoHtml = LOGO_B64
+    ? `<img src="cid:gymlogo" width="60" height="60" style="display:block;margin:0 auto 8px" alt="${GYM_NAME}" />`
+    : ''
   const html = `
       <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px">
-        <h2 style="color:#0f2951">Praxis</h2>
+        <div style="text-align:center;padding-bottom:12px;border-bottom:2px solid #b89540;margin-bottom:16px">
+          ${logoHtml}
+          <h2 style="color:#0f2951;margin:0">${GYM_NAME}</h2>
+          <p style="color:#64748b;font-size:12px;margin:4px 0 0">${GYM_ADDRESS}</p>
+        </div>
         <p>Dear <strong>${student.name}</strong>,</p>
         <p>Please find attached your fee receipt for <strong>${monthStr}</strong>.</p>
         <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px">
@@ -276,9 +308,22 @@ export async function generateAndEmailFeeReceipt(feeCollectionId: string): Promi
           <tr><td style="padding:6px;background:#e6ecf5;font-weight:bold">Payment Mode</td><td style="padding:6px">${payMode}</td></tr>
           <tr><td style="padding:6px;background:#e6ecf5;font-weight:bold">Date</td><td style="padding:6px">${dateStr}</td></tr>
         </table>
-        <p style="color:#64748b;font-size:12px">Praxis, ECR, Chennai</p>
+        <p style="color:#64748b;font-size:12px">${GYM_NAME}, ${GYM_ADDRESS}</p>
       </div>
     `
+
+  const mailAttachments: nodemailer.SendMailOptions['attachments'] = [{
+    filename: `Fee_Receipt_${rNo}.pdf`,
+    content: pdfBuffer,
+    contentType: 'application/pdf',
+  }]
+  if (LOGO_B64) {
+    mailAttachments.push({
+      filename: 'logo.webp',
+      content: Buffer.from(LOGO_B64, 'base64'),
+      cid: 'gymlogo',
+    })
+  }
 
   await saveEmailPreview('receipt', subject, html)
   await transport.sendMail({
@@ -286,11 +331,7 @@ export async function generateAndEmailFeeReceipt(feeCollectionId: string): Promi
     to: student.email,
     subject,
     html,
-    attachments: [{
-      filename: `Fee_Receipt_${rNo}.pdf`,
-      content: pdfBuffer,
-      contentType: 'application/pdf',
-    }],
+    attachments: mailAttachments,
   })
 
   console.log(`[RECEIPT] Sent to ${student.email} (${rNo})`)

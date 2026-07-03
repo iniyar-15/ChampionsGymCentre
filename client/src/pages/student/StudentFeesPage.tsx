@@ -5,13 +5,25 @@ import { useAuth } from '@/context/AuthContext'
 import Button from '@/components/ui/Button'
 import { FormField, Input, Select } from '@/components/ui/FormField'
 import Modal from '@/components/ui/Modal'
-import { formatCurrency, formatDate, PAYMENT_MODES } from '@/lib/utils'
+import { formatCurrency, formatDate } from '@/lib/utils'
 import { format, startOfMonth, subMonths } from 'date-fns'
-import { Download, CreditCard } from 'lucide-react'
+import { Download } from 'lucide-react'
+
+const API_URL = import.meta.env.VITE_API_URL ?? ''
+
+type PaymentConfig = {
+  upi_id?: string; upi_name?: string; upi_qr_url?: string
+  bank_name?: string; account_number?: string; ifsc_code?: string
+  account_holder?: string; branch?: string
+}
 
 type StaffMember = { id: string; user_name: string; role: string }
 
-const API_URL = import.meta.env.VITE_API_URL ?? ''
+const PAYMENT_OPTIONS = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'upi', label: 'UPI' },
+  { value: 'bank_transfer', label: 'Bank Transfer' },
+]
 
 export default function StudentFeesPage() {
   const qc = useQueryClient()
@@ -20,7 +32,10 @@ export default function StudentFeesPage() {
 
   const [payModal, setPayModal] = useState(false)
   const [selectedMonth, setSelectedMonth] = useState(format(startOfMonth(new Date()), 'yyyy-MM'))
-  const [payForm, setPayForm] = useState({ payment_mode: '', paid_date: format(new Date(), 'yyyy-MM-dd'), reference_id: '', paid_amount: '', cash_received_by: '' })
+  const [payForm, setPayForm] = useState({
+    payment_mode: '', paid_date: format(new Date(), 'yyyy-MM-dd'),
+    reference_id: '', paid_amount: '', cash_received_by: '',
+  })
   const [formError, setFormError] = useState('')
 
   const { data: feeHistory = [] } = useQuery({
@@ -42,6 +57,14 @@ export default function StudentFeesPage() {
     },
   })
 
+  const { data: payConfig = {} as PaymentConfig } = useQuery<PaymentConfig>({
+    queryKey: ['payment-config'],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/api/payment-config`)
+      return res.json()
+    },
+  })
+
   const { data: staffList = [] } = useQuery<StaffMember[]>({
     queryKey: ['staff-list'],
     queryFn: async () => {
@@ -58,11 +81,13 @@ export default function StudentFeesPage() {
   const payMutation = useMutation({
     mutationFn: async () => {
       setFormError('')
-      if (!payForm.payment_mode) throw new Error('Select payment mode')
+      if (!payForm.payment_mode) throw new Error('Select a payment mode')
       if (!payForm.paid_date) throw new Error('Enter payment date')
-      if (!payForm.paid_amount) throw new Error('Enter amount paid')
+      if (!payForm.paid_amount || parseFloat(payForm.paid_amount) <= 0) throw new Error('Enter a valid amount')
       if (payForm.payment_mode === 'cash' && !payForm.cash_received_by)
-        throw new Error('Please select who received the cash payment')
+        throw new Error('Select who received the cash')
+      if ((payForm.payment_mode === 'upi' || payForm.payment_mode === 'bank_transfer') && !payForm.reference_id)
+        throw new Error('Enter the transaction / UTR reference number')
 
       const monthDate = `${selectedMonth}-01`
       const res = await fetch(`${API_URL}/api/fee`, {
@@ -83,87 +108,13 @@ export default function StudentFeesPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Failed to record payment')
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['student-fees'] }); setPayModal(false) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['student-fees'] })
+      setPayModal(false)
+      alert('Payment submitted! You will receive a receipt once it is verified by the admin.')
+    },
     onError: (e: Error) => setFormError(e.message),
   })
-
-  async function loadRazorpayScript(): Promise<boolean> {
-    if ((window as any).Razorpay) return true
-    return new Promise(resolve => {
-      const script = document.createElement('script')
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
-      script.onload = () => resolve(true)
-      script.onerror = () => resolve(false)
-      document.body.appendChild(script)
-    })
-  }
-
-  async function handlePayOnline(amountOverride?: number) {
-    if (!feeStructure || !student) return
-    const loaded = await loadRazorpayScript()
-    if (!loaded) { alert('Failed to load payment gateway. Please try again.'); return }
-
-    const keyId = import.meta.env.VITE_RAZORPAY_KEY_ID
-    if (!keyId || keyId.startsWith('rzp_test_your')) {
-      alert('Payment gateway not configured yet. Please contact the admin.')
-      return
-    }
-
-    setPayModal(false)
-
-    // Create order on server
-    const res = await fetch(`${API_URL}/api/fee/create-order`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        amount: amountOverride ?? feeStructure.amount,
-        studentId: student.id,
-        month: selectedMonth,
-        feeStructureId: student.fee_structure_id,
-      }),
-    })
-    const order = await res.json()
-    if (!res.ok) { alert(order.error || 'Failed to initiate payment'); return }
-
-    const options = {
-      key: keyId,
-      amount: order.amount,
-      currency: order.currency,
-      name: 'Champions Gymnastics Center',
-      description: `Fee for ${format(new Date(selectedMonth + '-01'), 'MMMM yyyy')}`,
-      order_id: order.orderId,
-      prefill: {
-        name: student.name,
-        contact: student.contact_phone,
-        email: student.email || '',
-      },
-      theme: { color: '#1d4ed8' },
-      handler: async (response: any) => {
-        const verifyRes = await fetch(`${API_URL}/api/fee/verify-payment`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            razorpay_order_id: response.razorpay_order_id,
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_signature: response.razorpay_signature,
-            studentId: student.id,
-            month: selectedMonth,
-            feeStructureId: student.fee_structure_id,
-            amount: order.amount,
-          }),
-        })
-        const result = await verifyRes.json()
-        if (verifyRes.ok) {
-          qc.invalidateQueries({ queryKey: ['student-fees', student.id] })
-          alert('Payment successful! A receipt has been emailed to you.')
-        } else {
-          alert(result.error || 'Payment recorded but verification failed. Contact admin.')
-        }
-      },
-    }
-    const rzp = new (window as any).Razorpay(options)
-    rzp.open()
-  }
 
   async function downloadReceipt(id: string) {
     const res = await fetch(`${API_URL}/api/fee/${id}/receipt-download`)
@@ -189,6 +140,9 @@ export default function StudentFeesPage() {
     return format(startOfMonth(d), 'yyyy-MM')
   })
 
+  const hasUpiConfig = payConfig.upi_id || payConfig.upi_qr_url
+  const hasBankConfig = payConfig.account_number
+
   return (
     <div>
       <div className="mb-6">
@@ -196,7 +150,6 @@ export default function StudentFeesPage() {
         <p className="text-sm text-gray-500 mt-1">View and pay monthly fees</p>
       </div>
 
-      {/* Fee plan banner */}
       {feeStructure && (
         <div className="bg-blue-600 rounded-xl p-5 mb-6 text-white flex items-center justify-between">
           <div>
@@ -208,7 +161,6 @@ export default function StudentFeesPage() {
         </div>
       )}
 
-      {/* Pay section */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 mb-6">
         <h2 className="font-semibold text-gray-800 mb-4">Pay Fees</h2>
         <div className="flex items-end gap-4">
@@ -230,7 +182,6 @@ export default function StudentFeesPage() {
         </div>
       </div>
 
-      {/* History */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
         <div className="px-5 py-4 border-b">
           <h2 className="font-semibold text-gray-800">Payment History</h2>
@@ -243,27 +194,18 @@ export default function StudentFeesPage() {
             {feeHistory.length === 0 ? (
               <tr><td colSpan={7} className="text-center py-8 text-gray-400">No payment history</td></tr>
             ) : feeHistory.map((fc: any) => {
-              const isCash = fc.payment_mode === 'cash'
-              const hasPaid = (fc.paid_amount || 0) > 0
-              const isApproved = !!fc.receipt_url
-              const isPendingApproval = isCash && hasPaid && !isApproved
-              const balance = fc.amount - (fc.paid_amount || 0)
-              const status = isPendingApproval ? 'Pending Approval' : balance <= 0 ? 'Paid' : fc.paid_amount ? 'Partial' : 'Pending'
+              const isVerified = fc.status === 'verified' || !!fc.receipt_url
+              const isSubmitted = !isVerified && (fc.status === 'submitted' || (fc.paid_amount || 0) > 0)
+              const statusLabel = isVerified ? 'Verified ✓' : isSubmitted ? 'Pending Verification' : 'Pending'
+              const statusCls = isVerified ? 'badge-green' : isSubmitted ? 'badge-yellow' : 'badge-red'
               return (
                 <tr key={fc.id}>
                   <td className="font-medium">{format(new Date(fc.month), 'MMMM yyyy')}</td>
                   <td>{formatCurrency(fc.amount)}</td>
                   <td className="text-green-600">{formatCurrency(fc.paid_amount || 0)}</td>
                   <td>{formatDate(fc.paid_date)}</td>
-                  <td>{fc.payment_mode || '—'}</td>
-                  <td>
-                    <span className={`badge ${
-                      status === 'Paid' ? 'badge-green'
-                      : status === 'Pending Approval' ? 'badge-yellow'
-                      : status === 'Partial' ? 'badge-yellow'
-                      : 'badge-red'
-                    }`}>{status}</span>
-                  </td>
+                  <td className="capitalize">{fc.payment_mode?.replace('_', ' ') || '—'}</td>
+                  <td><span className={`badge ${statusCls}`}>{statusLabel}</span></td>
                   <td>
                     {fc.receipt_url && (
                       <Button size="sm" variant="ghost" onClick={() => downloadReceipt(fc.id)} title="Download receipt">
@@ -278,104 +220,111 @@ export default function StudentFeesPage() {
         </table>
       </div>
 
-      <Modal open={payModal} onClose={() => setPayModal(false)} title="Pay Fees" size="sm">
-        {(() => {
-          const txnFeePercent = parseFloat(import.meta.env.VITE_TRANSACTION_FEE_PERCENT || '2')
-          const baseAmount = parseFloat(payForm.paid_amount) || 0
-          const isOnline = payForm.payment_mode && payForm.payment_mode !== 'cash'
-          const txnFee = isOnline ? Math.round(baseAmount * txnFeePercent) / 100 : 0
-          const txnFeeGST = Math.round(txnFee * 18) / 100
-          const totalAmount = baseAmount + txnFee + txnFeeGST
+      <Modal open={payModal} onClose={() => setPayModal(false)} title="Pay Fees" size="md">
+        <div className="space-y-4">
+          {formError && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{formError}</div>}
 
-          return (
-            <div className="space-y-4">
-              {formError && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{formError}</div>}
+          <div className="p-3 bg-blue-50 rounded-lg">
+            <p className="text-sm text-blue-700 font-medium">
+              {format(new Date(selectedMonth + '-01'), 'MMMM yyyy')} — Amount Due: {formatCurrency(feeStructure?.amount || 0)}
+            </p>
+          </div>
 
-              <div className="p-3 bg-blue-50 rounded-lg">
-                <p className="text-sm text-blue-700 font-medium">
-                  {format(new Date(selectedMonth + '-01'), 'MMMM yyyy')} — Amount Due: {formatCurrency(feeStructure?.amount || 0)}
-                </p>
-              </div>
+          <FormField label="Amount (₹)" required>
+            <Input type="number" value={payForm.paid_amount} onChange={e => setPayForm(f => ({ ...f, paid_amount: e.target.value }))} />
+          </FormField>
 
-              <FormField label="Amount (₹)" required>
-                <Input type="number" value={payForm.paid_amount} onChange={e => setPayForm(f => ({ ...f, paid_amount: e.target.value }))} />
-              </FormField>
+          <FormField label="Payment Mode" required>
+            <Select value={payForm.payment_mode} onChange={e => setPayForm(f => ({ ...f, payment_mode: e.target.value, reference_id: '', cash_received_by: '' }))}>
+              <option value="">— Select —</option>
+              {PAYMENT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </Select>
+          </FormField>
 
-              <FormField label="Payment Mode" required>
-                <Select value={payForm.payment_mode} onChange={e => setPayForm(f => ({ ...f, payment_mode: e.target.value }))}>
-                  <option value="">— Select —</option>
-                  {PAYMENT_MODES.map(m => (
-                    <option key={m} value={m}>
-                      {m === 'upi' ? 'UPI' : m === 'bank_transfer' ? 'Bank Transfer' : m.charAt(0).toUpperCase() + m.slice(1)}
-                    </option>
-                  ))}
-                </Select>
-              </FormField>
-
-              {/* Cash-only fields */}
-              {payForm.payment_mode === 'cash' && (
-                <>
-                  <FormField label="Payment Date" required>
-                    <Input type="date" value={payForm.paid_date} onChange={e => setPayForm(f => ({ ...f, paid_date: e.target.value }))} />
-                  </FormField>
-                  <FormField label="Cash Paid To" required hint="Select the coach or admin you paid">
-                    <Select value={payForm.cash_received_by} onChange={e => setPayForm(f => ({ ...f, cash_received_by: e.target.value }))}>
-                      <option value="">— Select —</option>
-                      {staffList.map(s => (
-                        <option key={s.id} value={s.id}>{s.user_name} ({s.role})</option>
-                      ))}
-                    </Select>
-                  </FormField>
-                </>
-              )}
-
-              {/* Online payment breakdown */}
-              {isOnline && baseAmount > 0 && (
-                <div className="rounded-lg border border-gray-200 overflow-hidden text-sm">
-                  <div className="flex justify-between px-4 py-2 bg-gray-50">
-                    <span className="text-gray-600">Fee amount</span>
-                    <span>{formatCurrency(baseAmount)}</span>
-                  </div>
-                  <div className="flex justify-between px-4 py-2 bg-gray-50 border-t border-gray-200">
-                    <span className="text-gray-600">Transaction fee ({txnFeePercent}%)</span>
-                    <span>{formatCurrency(txnFee)}</span>
-                  </div>
-                  <div className="flex justify-between px-4 py-2 bg-gray-50 border-t border-gray-200">
-                    <span className="text-gray-600">GST on transaction fee (18%)</span>
-                    <span>{formatCurrency(txnFeeGST)}</span>
-                  </div>
-                  <div className="flex justify-between px-4 py-2.5 bg-blue-600 text-white font-semibold border-t">
-                    <span>Total to Pay</span>
-                    <span>{formatCurrency(totalAmount)}</span>
-                  </div>
+          {/* UPI */}
+          {payForm.payment_mode === 'upi' && (
+            <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+              <p className="text-sm font-semibold text-gray-700">Pay via UPI</p>
+              {payConfig.upi_qr_url && (
+                <div className="flex justify-center">
+                  <img src={payConfig.upi_qr_url} alt="UPI QR Code" className="w-48 h-48 object-contain border rounded-lg p-2" />
                 </div>
               )}
-
-              {isOnline && baseAmount > 0 && (
-                <p className="text-xs text-gray-500 text-center">
-                  You'll be redirected to our secure payment gateway
-                </p>
+              {payConfig.upi_id && (
+                <div className="text-center">
+                  <p className="text-xs text-gray-500">UPI ID</p>
+                  <p className="font-mono font-semibold text-gray-800">{payConfig.upi_id}</p>
+                  {payConfig.upi_name && <p className="text-xs text-gray-500">{payConfig.upi_name}</p>}
+                </div>
               )}
-
-              <div className="flex gap-3 justify-end pt-2">
-                <Button variant="outline" onClick={() => setPayModal(false)}>Cancel</Button>
-                {payForm.payment_mode === 'cash' ? (
-                  <Button onClick={() => payMutation.mutate()} loading={payMutation.isPending}>
-                    Record Payment
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={() => handlePayOnline(totalAmount)}
-                    disabled={!payForm.payment_mode || !payForm.paid_amount}
-                  >
-                    <CreditCard size={15} /> Pay {baseAmount > 0 ? formatCurrency(totalAmount) : ''} →
-                  </Button>
-                )}
-              </div>
+              {!hasUpiConfig && (
+                <p className="text-sm text-amber-700 bg-amber-50 rounded p-2 text-center">UPI details not configured yet. Contact admin.</p>
+              )}
+              <FormField label="UTR / Transaction Reference" required>
+                <Input value={payForm.reference_id} onChange={e => setPayForm(f => ({ ...f, reference_id: e.target.value }))} placeholder="Enter UTR or transaction ID from your UPI app" />
+              </FormField>
+              <FormField label="Payment Date" required>
+                <Input type="date" value={payForm.paid_date} onChange={e => setPayForm(f => ({ ...f, paid_date: e.target.value }))} />
+              </FormField>
             </div>
-          )
-        })()}
+          )}
 
+          {/* Bank Transfer */}
+          {payForm.payment_mode === 'bank_transfer' && (
+            <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+              <p className="text-sm font-semibold text-gray-700">Bank Transfer Details</p>
+              {hasBankConfig ? (
+                <div className="space-y-1.5 text-sm">
+                  {payConfig.bank_name && <div className="flex justify-between"><span className="text-gray-500">Bank</span><span className="font-medium">{payConfig.bank_name}</span></div>}
+                  {payConfig.account_holder && <div className="flex justify-between"><span className="text-gray-500">Account Name</span><span className="font-medium">{payConfig.account_holder}</span></div>}
+                  {payConfig.account_number && <div className="flex justify-between"><span className="text-gray-500">Account Number</span><span className="font-mono font-medium">{payConfig.account_number}</span></div>}
+                  {payConfig.ifsc_code && <div className="flex justify-between"><span className="text-gray-500">IFSC Code</span><span className="font-mono font-medium">{payConfig.ifsc_code}</span></div>}
+                  {payConfig.branch && <div className="flex justify-between"><span className="text-gray-500">Branch</span><span className="font-medium">{payConfig.branch}</span></div>}
+                </div>
+              ) : (
+                <p className="text-sm text-amber-700 bg-amber-50 rounded p-2 text-center">Bank details not configured yet. Contact admin.</p>
+              )}
+              <FormField label="Transaction Reference Number" required>
+                <Input value={payForm.reference_id} onChange={e => setPayForm(f => ({ ...f, reference_id: e.target.value }))} placeholder="Enter NEFT/IMPS/RTGS reference number" />
+              </FormField>
+              <FormField label="Payment Date" required>
+                <Input type="date" value={payForm.paid_date} onChange={e => setPayForm(f => ({ ...f, paid_date: e.target.value }))} />
+              </FormField>
+            </div>
+          )}
+
+          {/* Cash */}
+          {payForm.payment_mode === 'cash' && (
+            <div className="space-y-3">
+              <FormField label="Payment Date" required>
+                <Input type="date" value={payForm.paid_date} onChange={e => setPayForm(f => ({ ...f, paid_date: e.target.value }))} />
+              </FormField>
+              <FormField label="Cash Paid To" required hint="Select the coach or admin you paid">
+                <Select value={payForm.cash_received_by} onChange={e => setPayForm(f => ({ ...f, cash_received_by: e.target.value }))}>
+                  <option value="">— Select —</option>
+                  {staffList.map(s => <option key={s.id} value={s.id}>{s.user_name} ({s.role})</option>)}
+                </Select>
+              </FormField>
+            </div>
+          )}
+
+          {payForm.payment_mode && (
+            <p className="text-xs text-gray-500 bg-gray-50 rounded p-2 text-center">
+              Your payment will be confirmed once verified by the admin. Receipt will be emailed after verification.
+            </p>
+          )}
+
+          <div className="flex gap-3 justify-end pt-2">
+            <Button variant="outline" onClick={() => setPayModal(false)}>Cancel</Button>
+            <Button
+              onClick={() => payMutation.mutate()}
+              loading={payMutation.isPending}
+              disabled={!payForm.payment_mode}
+            >
+              Submit Payment
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   )

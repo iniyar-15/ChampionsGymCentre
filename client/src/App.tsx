@@ -18,6 +18,8 @@ import CompetitionsPage from '@/pages/admin/competitions/CompetitionsPage'
 import FeeStructuresPage from '@/pages/admin/fees/FeeStructuresPage'
 import FeeCollectionPage from '@/pages/admin/fees/FeeCollectionPage'
 import ReportsPage from '@/pages/admin/reports/ReportsPage'
+import PaymentConfigPage from '@/pages/admin/payments/PaymentConfigPage'
+import PaymentReconciliationPage from '@/pages/admin/payments/PaymentReconciliationPage'
 
 // Coach pages
 import CoachDashboard from '@/pages/coach/CoachDashboard'
@@ -73,6 +75,8 @@ function AppRoutes() {
         <Route path="competitions" element={<CompetitionsPage />} />
         <Route path="fee-structures" element={<FeeStructuresPage />} />
         <Route path="fee-collection" element={<FeeCollectionPage />} />
+        <Route path="payment-config" element={<PaymentConfigPage />} />
+        <Route path="reconcile" element={<PaymentReconciliationPage />} />
         <Route path="reports" element={<ReportsPage />} />
       </Route>
 

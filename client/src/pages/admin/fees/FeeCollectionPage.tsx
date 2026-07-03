@@ -10,7 +10,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import Button from '@/components/ui/Button'
 import { FormField, Input, Select, Textarea } from '@/components/ui/FormField'
 import { formatCurrency, formatDate, PAYMENT_MODES } from '@/lib/utils'
-import { format, startOfMonth, subMonths, addMonths } from 'date-fns'
+import { format, startOfMonth, subMonths, addMonths, getDaysInMonth, isSameMonth, parseISO } from 'date-fns'
 import { useAuth } from '@/context/AuthContext'
 
 const API_URL = import.meta.env.VITE_API_URL ?? ''
@@ -18,9 +18,26 @@ const API_URL = import.meta.env.VITE_API_URL ?? ''
 type FeeCollectionFull = FeeCollectionRow & {
   students: { name: string; contact_phone: string } | null
   fee_structures: { name: string; amount: number } | null
+  status?: string
+}
+
+type StudentWithFee = {
+  id: string; name: string; contact_phone: string
+  fee_structure_id: string | null; start_date: string | null
+  fee_structures: { name: string; amount: number } | null
 }
 
 type StaffMember = { id: string; user_name: string; role: string }
+
+function calcProrated(fee: number, startDate: string, month: string): number | null {
+  if (!startDate || !fee || !month) return null
+  const start = parseISO(startDate)
+  const monthDate = parseISO(`${month}-01`)
+  if (!isSameMonth(start, monthDate)) return null
+  const daysInMonth = getDaysInMonth(monthDate)
+  const remaining = daysInMonth - start.getDate() + 1
+  return Math.round((fee / daysInMonth) * remaining)
+}
 
 const emptyForm = {
   month: format(startOfMonth(new Date()), 'yyyy-MM'),
@@ -58,10 +75,10 @@ export default function FeeCollectionPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from('students')
-        .select('id, name, contact_phone, fee_structure_id, fee_structures(name, amount)')
+        .select('id, name, contact_phone, fee_structure_id, start_date, fee_structures(name, amount)')
         .eq('is_active', true)
         .order('name')
-      return (data || []) as unknown as { id: string; name: string; contact_phone: string; fee_structure_id: string | null; fee_structures: { name: string; amount: number } | null }[]
+      return (data || []) as unknown as StudentWithFee[]
     },
   })
 
@@ -75,13 +92,23 @@ export default function FeeCollectionPage() {
 
   function onStudentChange(studentId: string) {
     const student = students.find(s => s.id === studentId)
+    const fullFee = student?.fee_structures?.amount
+    const prorated = fullFee && student?.start_date
+      ? calcProrated(fullFee, student.start_date, form.month)
+      : null
     setForm(f => ({
       ...f,
       student_id: studentId,
       fee_structure_id: student?.fee_structure_id || '',
-      amount: student?.fee_structures?.amount?.toString() || '',
+      amount: (prorated ?? fullFee ?? '').toString(),
     }))
   }
+
+  const selectedStudent = students.find(s => s.id === form.student_id)
+  const proratedHint = (() => {
+    if (!selectedStudent?.start_date || !selectedStudent.fee_structures) return null
+    return calcProrated(selectedStudent.fee_structures.amount, selectedStudent.start_date, form.month)
+  })()
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -118,13 +145,16 @@ export default function FeeCollectionPage() {
     onError: (e: Error) => setFormError(e.message),
   })
 
-  const approveMutation = useMutation({
+  const verifyMutation = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`${API_URL}/api/fee/${id}/send-receipt`, { method: 'POST' })
-      if (!res.ok) throw new Error('Failed to approve payment')
+      const res = await fetch(`${API_URL}/api/fee/${id}/verify`, { method: 'POST' })
+      if (!res.ok) throw new Error('Failed to verify payment')
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['fee-collections'] }); alert('Payment approved. Receipt generated and emailed to student.') },
-    onError: () => alert('Failed to approve. Check student email is set.'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['fee-collections'] })
+      alert('Payment verified. Receipt generated and emailed to student.')
+    },
+    onError: () => alert('Failed to verify. Check student email is set.'),
   })
 
   async function downloadReceipt(id: string) {
@@ -167,11 +197,19 @@ export default function FeeCollectionPage() {
   const totalCollected = filtered.reduce((s, fc) => s + (fc.paid_amount || 0), 0)
   const totalDue = filtered.reduce((s, fc) => s + (fc.amount - (fc.paid_amount || 0)), 0)
 
-  // Month options: last 12 months → current → next 2
   const now = startOfMonth(new Date())
   const monthOptions = Array.from({ length: 15 }, (_, i) =>
     format(addMonths(subMonths(now, 12), i), 'yyyy-MM')
   )
+
+  function getStatus(fc: FeeCollectionFull) {
+    const status = (fc as any).status as string | undefined
+    const isVerified = status === 'verified' || !!(fc as any).receipt_url
+    if (isVerified) return { label: 'Verified', cls: 'badge-green', isVerified: true, isSubmitted: false }
+    if (status === 'submitted' || (fc.paid_amount || 0) > 0)
+      return { label: 'Pending Verification', cls: 'badge-yellow', isVerified: false, isSubmitted: true }
+    return { label: 'Pending', cls: 'badge-red', isVerified: false, isSubmitted: false }
+  }
 
   return (
     <div>
@@ -181,7 +219,6 @@ export default function FeeCollectionPage() {
         action={{ label: 'Record Payment', onClick: openCreate, icon: <Plus size={16} /> }}
       />
 
-      {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
           <p className="text-xs text-gray-500 font-medium mb-1">Total Billed</p>
@@ -226,27 +263,7 @@ export default function FeeCollectionPage() {
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={9} className="text-center py-8 text-gray-400">No records for this month</td></tr>
               ) : filtered.map(fc => {
-                const balance = fc.amount - (fc.paid_amount || 0)
-                const isCash = fc.payment_mode === 'cash'
-                const hasPaid = (fc.paid_amount || 0) > 0
-                const isApproved = !!(fc as any).receipt_url
-                const pendingCashApproval = isCash && hasPaid && !isApproved
-
-                let statusLabel: string
-                let statusClass: string
-                if (pendingCashApproval) {
-                  statusLabel = 'Pending Approval'
-                  statusClass = 'badge-yellow'
-                } else if (balance <= 0) {
-                  statusLabel = 'Paid'
-                  statusClass = 'badge-green'
-                } else if (hasPaid) {
-                  statusLabel = 'Partial'
-                  statusClass = 'badge-yellow'
-                } else {
-                  statusLabel = 'Pending'
-                  statusClass = 'badge-red'
-                }
+                const { label: statusLabel, cls: statusClass, isVerified, isSubmitted } = getStatus(fc)
 
                 return (
                   <tr key={fc.id}>
@@ -258,28 +275,25 @@ export default function FeeCollectionPage() {
                     <td>{formatCurrency(fc.amount)}</td>
                     <td className="font-medium text-green-600">{formatCurrency(fc.paid_amount || 0)}</td>
                     <td>{formatDate(fc.paid_date)}</td>
-                    <td>{fc.payment_mode || '—'}</td>
+                    <td className="capitalize">{fc.payment_mode?.replace('_', ' ') || '—'}</td>
                     <td className="text-xs">{fc.reference_id || '—'}</td>
-                    <td>
-                      <span className={`badge ${statusClass}`}>{statusLabel}</span>
-                    </td>
+                    <td><span className={`badge ${statusClass}`}>{statusLabel}</span></td>
                     <td>
                       <div className="flex gap-2">
                         <Button size="sm" variant="ghost" onClick={() => openEdit(fc)}><Pencil size={14} /></Button>
-                        {isApproved && (
+                        {(fc as any).receipt_url && (
                           <Button size="sm" variant="ghost" onClick={() => downloadReceipt(fc.id)} title="Download receipt">
                             <Download size={14} />
                           </Button>
                         )}
-                        {pendingCashApproval && (
+                        {isSubmitted && !isVerified && (
                           <Button
                             size="sm" variant="outline"
-                            onClick={() => approveMutation.mutate(fc.id)}
-                            loading={approveMutation.isPending}
-                            title="Approve cash payment and generate receipt"
+                            onClick={() => verifyMutation.mutate(fc.id)}
+                            loading={verifyMutation.isPending}
                             className="text-green-700 border-green-300 hover:bg-green-50 text-xs px-2"
                           >
-                            <CheckCircle size={13} /> Approve
+                            <CheckCircle size={13} /> Verify
                           </Button>
                         )}
                         <Button size="sm" variant="ghost" onClick={() => setDeleteId(fc.id)} className="text-red-500 hover:text-red-700"><Trash2 size={14} /></Button>
@@ -309,6 +323,12 @@ export default function FeeCollectionPage() {
             </FormField>
           </div>
 
+          {proratedHint && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+              Prorated fee applied: ₹{proratedHint} (joining {selectedStudent!.start_date}, {getDaysInMonth(parseISO(`${form.month}-01`))} days in month)
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <FormField label="Fee Amount (₹)" required>
               <Input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
@@ -325,27 +345,27 @@ export default function FeeCollectionPage() {
             <FormField label="Payment Mode">
               <Select value={form.payment_mode} onChange={e => setForm(f => ({ ...f, payment_mode: e.target.value }))}>
                 <option value="">— Select —</option>
-                {PAYMENT_MODES.map(m => <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>)}
+                {PAYMENT_MODES.map(m => (
+                  <option key={m} value={m}>
+                    {m === 'upi' ? 'UPI' : m === 'bank_transfer' ? 'Bank Transfer' : 'Cash'}
+                  </option>
+                ))}
               </Select>
             </FormField>
           </div>
 
           {form.payment_mode === 'cash' && parseFloat(form.paid_amount) > 0 && (
-            <FormField label="Cash Received By" required hint="Select who received the cash">
+            <FormField label="Cash Received By" required>
               <Select value={form.cash_received_by} onChange={e => setForm(f => ({ ...f, cash_received_by: e.target.value }))}>
                 <option value="">— Select Staff —</option>
-                {staffList.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.user_name} ({s.role})
-                  </option>
-                ))}
+                {staffList.map(s => <option key={s.id} value={s.id}>{s.user_name} ({s.role})</option>)}
               </Select>
             </FormField>
           )}
 
-          {form.payment_mode !== 'cash' && (
-            <FormField label="Reference / Transaction ID">
-              <Input value={form.reference_id} onChange={e => setForm(f => ({ ...f, reference_id: e.target.value }))} placeholder="UPI ref, cheque no…" />
+          {(form.payment_mode === 'upi' || form.payment_mode === 'bank_transfer') && (
+            <FormField label="Transaction / Reference ID">
+              <Input value={form.reference_id} onChange={e => setForm(f => ({ ...f, reference_id: e.target.value }))} placeholder="UTR / transaction number" />
             </FormField>
           )}
 
